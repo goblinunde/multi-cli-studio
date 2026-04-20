@@ -1,10 +1,10 @@
 Name:           multi-cli-studio
-Version:        1.0.1
+Version:        2.0.0
 Release:        1%{?dist}
 Summary:        Desktop orchestration shell for multiple AI coding CLIs
 
-License:        MIT
-URL:            https://github.com/Austin-Patrician/multi-cli-studio
+License:        CC-BY-NC-SA-4.0 AND MIT
+URL:            https://github.com/goblinunde/multi-cli-studio
 Source0:        %{name}-%{version}.tar.gz
 Source1:        %{name}.desktop
 
@@ -79,6 +79,10 @@ desktop-file-validate "%{buildroot}%{_datadir}/applications/%{name}.desktop"
 %{_datadir}/icons/hicolor/512x512/apps/%{name}.png
 
 %changelog
+* Mon Apr 20 2026 Codex <codex@example.com> - 2.0.0-1
+- Prepare the 2.0.0 release line and align package metadata with the current repository
+- Publish Linux release artifacts as first-class deb/rpm bundles for x86_64 and aarch64
+
 * Mon Apr 20 2026 Codex <codex@example.com> - 1.0.1-1
 - Avoid eager startup workspace indexing that can freeze large-directory launches
 - Disable debuginfo and debugsource RPM subpackages for Fedora builds

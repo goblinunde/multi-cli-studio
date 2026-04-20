@@ -1,7 +1,9 @@
 [package]
 name = "multi-cli-studio"
-version = "1.0.1"
+version = "2.0.0"
 description = "Desktop orchestration shell for Codex, Claude, and Gemini CLIs."
+license = "CC-BY-NC-SA-4.0 AND MIT"
+repository = "https://github.com/goblinunde/multi-cli-studio"
 authors = ["OpenAI Codex"]
 edition = "2021"
 rust-version = "1.88"

@@ -177,6 +177,7 @@ struct GeminiLoadStatus {
     plan_name: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct KiroPayloadSnapshot {
     email: String,
@@ -1381,56 +1382,6 @@ fn account_from_value(platform: Platform, value: Value) -> Option<PlatformAccoun
     })
 }
 
-fn account_from_token(
-    platform: Platform,
-    token: String,
-    refresh_token: Option<String>,
-) -> PlatformAccountRecord {
-    let timestamp = now_iso();
-    PlatformAccountRecord {
-        id: create_id(&format!("{}-account", platform.as_str())),
-        email: format!(
-            "manual-{}@{}.local",
-            Uuid::new_v4().simple(),
-            platform.as_str()
-        ),
-        display_name: Some(format!("{} Manual Token", platform.label())),
-        auth_mode: "token".to_string(),
-        plan_name: None,
-        plan_type: None,
-        status: "active".to_string(),
-        tags: Vec::new(),
-        created_at: timestamp.clone(),
-        last_used: Some(timestamp),
-        user_id: None,
-        account_id: None,
-        organization_id: None,
-        account_name: None,
-        account_structure: None,
-        api_base_url: None,
-        api_provider_mode: None,
-        api_provider_id: None,
-        api_provider_name: None,
-        login_provider: None,
-        selected_auth_type: None,
-        project_id: None,
-        tier_id: None,
-        access_token: Some(token),
-        refresh_token,
-        id_token: None,
-        openai_api_key: None,
-        quota: None,
-        quota_error: None,
-        credits_total: None,
-        credits_used: None,
-        bonus_total: None,
-        bonus_used: None,
-        usage_reset_at: None,
-        detail: Some("Manual token import".to_string()),
-        raw: None,
-    }
-}
-
 fn account_from_api_key(api_key: String, api_base_url: Option<String>) -> PlatformAccountRecord {
     let timestamp = now_iso();
     PlatformAccountRecord {
@@ -1471,40 +1422,6 @@ fn account_from_api_key(api_key: String, api_base_url: Option<String>) -> Platfo
         detail: api_base_url.or_else(|| Some("OpenAI API Key".to_string())),
         raw: None,
     }
-}
-
-fn mark_account_refreshed(
-    platform: Platform,
-    account_id: &str,
-) -> Result<PlatformAccountRecord, String> {
-    let mut index = load_index(platform)?;
-    let now = now_iso();
-    let mut refreshed = None;
-
-    for account in &mut index.accounts {
-        if account.id == account_id {
-            account.status = "active".to_string();
-            account.last_used = Some(now.clone());
-            refreshed = Some(account.clone());
-            break;
-        }
-    }
-
-    let refreshed = refreshed.ok_or_else(|| format!("Account not found: {}", account_id))?;
-    save_index(platform, index)?;
-    Ok(refreshed)
-}
-
-fn mark_all_accounts_refreshed(platform: Platform) -> Result<i32, String> {
-    let mut index = load_index(platform)?;
-    let now = now_iso();
-    for account in &mut index.accounts {
-        account.status = "active".to_string();
-        account.last_used = Some(now.clone());
-    }
-    let count = index.accounts.len() as i32;
-    save_index(platform, index)?;
-    Ok(count)
 }
 
 fn delete_accounts(platform: Platform, account_ids: &[String]) -> Result<(), String> {

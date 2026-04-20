@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
 const packageJsonPath = path.join(repoRoot, "package.json");
+const packageLockPath = path.join(repoRoot, "package-lock.json");
 const cargoTomlPath = path.join(repoRoot, "src-tauri", "Cargo.toml");
 const tauriConfigPath = path.join(repoRoot, "src-tauri", "tauri.conf.json");
 const fedoraSpecPath = path.join(repoRoot, "packaging", "fedora", "SPECS", "multi-cli-studio.spec");
@@ -15,6 +16,9 @@ const checkOnly = args.includes("--check");
 const versionArg = args.find((value) => value !== "--check") ?? null;
 
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+const packageLock = fs.existsSync(packageLockPath)
+  ? JSON.parse(fs.readFileSync(packageLockPath, "utf8"))
+  : null;
 const packageVersion = packageJson.version;
 const targetVersion = versionArg ?? packageVersion;
 
@@ -41,6 +45,7 @@ if (!fedoraSpecVersionMatch) {
 
 const currentVersions = {
   package: packageVersion,
+  packageLock: packageLock?.version ?? packageVersion,
   cargo: cargoVersionMatch[1],
   tauri: String(tauriConfig.version ?? ""),
   fedoraSpec: fedoraSpecVersionMatch[1].trim(),
@@ -60,6 +65,12 @@ if (checkOnly) {
 }
 
 packageJson.version = targetVersion;
+if (packageLock) {
+  packageLock.version = targetVersion;
+  if (packageLock.packages?.[""]) {
+    packageLock.packages[""].version = targetVersion;
+  }
+}
 const nextCargoToml = cargoTomlRaw.replace(
   /^version\s*=\s*"([^"]+)"/m,
   `version = "${targetVersion}"`
@@ -71,10 +82,13 @@ const nextFedoraSpec = fedoraSpecRaw.replace(
 tauriConfig.version = targetVersion;
 
 fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+if (packageLock) {
+  fs.writeFileSync(packageLockPath, `${JSON.stringify(packageLock, null, 2)}\n`, "utf8");
+}
 fs.writeFileSync(cargoTomlPath, nextCargoToml, "utf8");
 fs.writeFileSync(tauriConfigPath, `${JSON.stringify(tauriConfig, null, 2)}\n`, "utf8");
 fs.writeFileSync(fedoraSpecPath, nextFedoraSpec, "utf8");
 
 console.log(
-  `Synchronized package.json, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, and packaging/fedora/SPECS/multi-cli-studio.spec to ${targetVersion}.`
+  `Synchronized package.json, package-lock.json, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, and packaging/fedora/SPECS/multi-cli-studio.spec to ${targetVersion}.`
 );

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix, for example 0.1.1"
+        description: "Release version without the v prefix, for example 2.0.0"
         required: true
         type: string
       release_name:
@@ -263,74 +263,103 @@ jobs:
             release-artifacts/multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe
             release-artifacts/multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe.sig
 
-  build_fedora_rpm:
-    name: Fedora RPM (x86_64)
-    runs-on: ubuntu-latest
+  build_linux_packages:
+    name: Linux Packages (${{ matrix.arch }})
+    runs-on: ${{ matrix.platform }}
     needs:
       - release_context
       - validate_release
-    container:
-      image: fedora:43
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-24.04
+            arch: x86_64
+          - platform: ubuntu-24.04-arm
+            arch: aarch64
+    env:
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
     steps:
-      - name: Install Fedora build dependencies
-        run: |
-          set -euo pipefail
-          dnf install -y \
-            cargo \
-            rust \
-            rpm-build \
-            gcc-c++ \
-            make \
-            nodejs \
-            webkit2gtk4.1-devel \
-            openssl-devel \
-            libappindicator-gtk3-devel \
-            librsvg2-devel \
-            libxdo-devel \
-            desktop-file-utils \
-            curl \
-            wget \
-            file \
-            tar \
-            gzip \
-            findutils \
-            which
-
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install Linux build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            rpm \
+            wget
 
       - name: Synchronize version metadata
         run: node ./scripts/sync-version.mjs ${{ needs.release_context.outputs.version }}
 
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Align updater feed with repository
+        run: node ./scripts/configure-release-feed.mjs ${{ github.repository }}
+
       - name: Validate version metadata
         run: node ./scripts/sync-version.mjs --check ${{ needs.release_context.outputs.version }}
 
-      - name: Build Fedora RPM artifacts
-        env:
-          RPM_TOPDIR: ${{ runner.temp }}/multi-cli-studio-rpmbuild
-          RPM_TMPPATH: ${{ runner.temp }}
-          CARGO_BUILD_JOBS: "1"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-          CARGO_PROFILE_RELEASE_DEBUG: "0"
+      - name: Materialize Tauri signing key
         run: |
           set -euo pipefail
-          sh packaging/fedora/build-rpm.sh
+          node ./scripts/materialize-tauri-signing-key.mjs "$HOME/.tauri/multi-cli-studio.key"
 
-      - name: Collect Fedora RPM artifacts
+      - name: Build Linux package artifacts
         env:
-          RPM_TOPDIR: ${{ runner.temp }}/multi-cli-studio-rpmbuild
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: |
+          set -euo pipefail
+          export TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/multi-cli-studio.key")"
+          npm run tauri:build -- --bundles deb,rpm
+
+      - name: Collect Linux package artifacts
         run: |
           set -euo pipefail
           mkdir -p release-artifacts
-          find "$RPM_TOPDIR/RPMS" -type f -name '*.rpm' -exec cp {} release-artifacts/ \;
-          find "$RPM_TOPDIR/SRPMS" -type f -name '*.src.rpm' -exec cp {} release-artifacts/ \;
+          find src-tauri/target/release/bundle/deb -maxdepth 1 -type f -name '*.deb' -exec cp {} release-artifacts/ \;
+          find src-tauri/target/release/bundle/rpm -maxdepth 1 -type f -name '*.rpm' -exec cp {} release-artifacts/ \;
+          if ! find release-artifacts -maxdepth 1 -type f \( -name '*.deb' -o -name '*.rpm' \) | grep -q .; then
+            echo "No Linux packages were produced."
+            exit 1
+          fi
           ls -lah release-artifacts
 
-      - name: Upload Fedora RPM artifacts
+      - name: Upload Linux package artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: fedora-rpm-x86_64
+          name: linux-packages-${{ matrix.arch }}
           path: |
+            release-artifacts/*.deb
             release-artifacts/*.rpm
 
   release:
@@ -340,7 +369,7 @@ jobs:
       - release_context
       - build_macos
       - build_windows
-      - build_fedora_rpm
+      - build_linux_packages
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RELEASE_REPOSITORY: ${{ github.repository }}
@@ -358,11 +387,12 @@ jobs:
           name: windows-x86_64
           path: release-artifacts
 
-      - name: Download Fedora RPM artifacts
+      - name: Download Linux package artifacts
         uses: actions/download-artifact@v4
         with:
-          name: fedora-rpm-x86_64
-          path: release-artifacts/fedora
+          pattern: linux-packages-*
+          path: release-artifacts/linux
+          merge-multiple: true
 
       - name: Build release notes
         run: |
@@ -446,19 +476,7 @@ jobs:
             release-artifacts/multi-cli-studio_x86_64.app.tar.gz.sig \
             release-artifacts/multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe \
             release-artifacts/multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe.sig \
+            release-artifacts/linux/*.deb \
+            release-artifacts/linux/*.rpm \
             release-artifacts/latest.json \
-            --clobber
-
-      - name: Upload Fedora RPM release assets
-        run: |
-          set -euo pipefail
-          RELEASE_TAG="${{ needs.release_context.outputs.release_tag }}"
-          mapfile -d '' fedora_assets < <(find release-artifacts/fedora -type f \( -name '*.rpm' -o -name '*.src.rpm' \) -print0)
-          if [ "${#fedora_assets[@]}" -eq 0 ]; then
-            echo "No Fedora RPM artifacts were downloaded."
-            exit 1
-          fi
-
-          gh release upload "$RELEASE_TAG" -R "$RELEASE_REPOSITORY" \
-            "${fedora_assets[@]}" \
             --clobber

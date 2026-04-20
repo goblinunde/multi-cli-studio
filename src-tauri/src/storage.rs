@@ -445,8 +445,6 @@ pub struct SemanticRecallRequest {
 #[derive(Debug, Clone, Default)]
 pub struct CompactContextResult {
     pub task_id: String,
-    pub snapshot: ContextSnapshot,
-    pub boundary: CompactBoundary,
     pub summarized_turn_count: usize,
     pub kept_turn_count: usize,
 }
@@ -473,9 +471,6 @@ pub struct ContextBudgetProfile {
 #[derive(Debug, Clone, Default)]
 pub struct ContextAssemblyResult {
     pub prompt: String,
-    pub approx_chars: usize,
-    pub included_layers: Vec<String>,
-    pub included_pack_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -2892,6 +2887,7 @@ impl TerminalStorage {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn count_messages_for_session(
         &self,
         tx: &Connection,
@@ -3357,9 +3353,6 @@ impl TerminalStorage {
 
         Ok(ContextAssemblyResult {
             prompt: assembled,
-            approx_chars,
-            included_layers,
-            included_pack_ids,
         })
     }
 
@@ -3546,8 +3539,6 @@ impl TerminalStorage {
 
         Ok(Some(CompactContextResult {
             task_id: task.id,
-            snapshot,
-            boundary,
             summarized_turn_count: summarized_turns.len(),
             kept_turn_count: kept_turns.len(),
         }))

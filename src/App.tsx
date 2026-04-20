@@ -1,21 +1,6 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { AppLayout } from "./layouts/AppLayout";
-import { TerminalPage } from "./pages/TerminalPage";
-import { AutomationJobsPage } from "./pages/AutomationJobsPage";
-import { AutomationJobEditorPage } from "./pages/AutomationJobEditorPage";
-import { AutomationWorkflowsPage } from "./pages/AutomationWorkflowsPage";
-import { AutomationWorkflowEditorPage } from "./pages/AutomationWorkflowEditorPage";
-import { ModelChatPage } from "./pages/ModelChatPage";
-import { DesktopSettingsPage } from "./pages/DesktopSettingsPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { ModelProvidersPage } from "./pages/ModelProvidersPage";
-import { ModelProviderEditorPage } from "./pages/ModelProviderEditorPage";
-import { PlatformCenterPage } from "./pages/PlatformCenterPage";
-import { CodexAccountsPage } from "./pages/platformAccounts/CodexAccountsPage";
-import { GeminiAccountsPage } from "./pages/platformAccounts/GeminiAccountsPage";
-import { KiroAccountsPage } from "./pages/platformAccounts/KiroAccountsPage";
-import { DesktopAgentsPage } from "./pages/DesktopAgentsPage";
 import { useStore } from "./lib/store";
 import { bridge } from "./lib/bridge";
 import {
@@ -23,6 +8,54 @@ import {
   PLATFORM_CENTER_API_PATH,
   PLATFORM_CENTER_BASE_PATH,
 } from "./lib/platformCenterRoutes";
+
+const TerminalPage = lazy(() => import("./pages/TerminalPage").then((m) => ({ default: m.TerminalPage })));
+const AutomationJobsPage = lazy(() =>
+  import("./pages/AutomationJobsPage").then((m) => ({ default: m.AutomationJobsPage }))
+);
+const AutomationJobEditorPage = lazy(() =>
+  import("./pages/AutomationJobEditorPage").then((m) => ({ default: m.AutomationJobEditorPage }))
+);
+const AutomationWorkflowsPage = lazy(() =>
+  import("./pages/AutomationWorkflowsPage").then((m) => ({ default: m.AutomationWorkflowsPage }))
+);
+const AutomationWorkflowEditorPage = lazy(() =>
+  import("./pages/AutomationWorkflowEditorPage").then((m) => ({ default: m.AutomationWorkflowEditorPage }))
+);
+const ModelChatPage = lazy(() => import("./pages/ModelChatPage").then((m) => ({ default: m.ModelChatPage })));
+const DesktopSettingsPage = lazy(() =>
+  import("./pages/DesktopSettingsPage").then((m) => ({ default: m.DesktopSettingsPage }))
+);
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const ModelProvidersPage = lazy(() =>
+  import("./pages/ModelProvidersPage").then((m) => ({ default: m.ModelProvidersPage }))
+);
+const ModelProviderEditorPage = lazy(() =>
+  import("./pages/ModelProviderEditorPage").then((m) => ({ default: m.ModelProviderEditorPage }))
+);
+const PlatformCenterPage = lazy(() =>
+  import("./pages/PlatformCenterPage").then((m) => ({ default: m.PlatformCenterPage }))
+);
+const CodexAccountsPage = lazy(() =>
+  import("./pages/platformAccounts/CodexAccountsPage").then((m) => ({ default: m.CodexAccountsPage }))
+);
+const GeminiAccountsPage = lazy(() =>
+  import("./pages/platformAccounts/GeminiAccountsPage").then((m) => ({ default: m.GeminiAccountsPage }))
+);
+const KiroAccountsPage = lazy(() =>
+  import("./pages/platformAccounts/KiroAccountsPage").then((m) => ({ default: m.KiroAccountsPage }))
+);
+const DesktopAgentsPage = lazy(() =>
+  import("./pages/DesktopAgentsPage").then((m) => ({ default: m.DesktopAgentsPage }))
+);
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[240px] items-center justify-center text-sm text-slate-500">
+      Loading...
+    </div>
+  );
+}
 
 function ModelProvidersRedirect() {
   const location = useLocation();
@@ -160,52 +193,54 @@ function App() {
   }, []);
 
   return (
-    <Routes>
-      <Route path="/settings" element={<DesktopSettingsPage />}>
-        <Route
-          path="general"
-          element={<SettingsPage embedded forcedSection="settings" hideSectionTabs />}
-        />
-        <Route path="model-providers" element={<PlatformCenterPage />}>
-          <Route path="api" element={<ModelProvidersPage embedded />} />
-          <Route path="api/new" element={<ModelProviderEditorPage embedded />} />
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route path="/settings" element={<DesktopSettingsPage />}>
           <Route
-            path="api/:serviceType/:providerId"
-            element={<ModelProviderEditorPage embedded />}
+            path="general"
+            element={<SettingsPage embedded forcedSection="settings" hideSectionTabs />}
           />
-          <Route path="accounts/codex" element={<CodexAccountsPage />} />
-          <Route path="accounts/gemini" element={<GeminiAccountsPage />} />
-          <Route path="accounts/kiro" element={<KiroAccountsPage />} />
+          <Route path="model-providers" element={<PlatformCenterPage />}>
+            <Route path="api" element={<ModelProvidersPage embedded />} />
+            <Route path="api/new" element={<ModelProviderEditorPage embedded />} />
+            <Route
+              path="api/:serviceType/:providerId"
+              element={<ModelProviderEditorPage embedded />}
+            />
+            <Route path="accounts/codex" element={<CodexAccountsPage />} />
+            <Route path="accounts/gemini" element={<GeminiAccountsPage />} />
+            <Route path="accounts/kiro" element={<KiroAccountsPage />} />
+          </Route>
+          <Route
+            path="model-providers/new"
+            element={<Navigate to={`${PLATFORM_CENTER_BASE_PATH}/api/new`} replace />}
+          />
+          <Route
+            path="model-providers/:serviceType/:providerId"
+            element={<ModelProviderEditorRedirect />}
+          />
+          <Route path="agents" element={<DesktopAgentsPage />} />
         </Route>
+        <Route path="/model-providers" element={<ModelProvidersRedirect />} />
+        <Route path="/model-providers/new" element={<ModelProviderEditorRedirect />} />
         <Route
-          path="model-providers/new"
-          element={<Navigate to={`${PLATFORM_CENTER_BASE_PATH}/api/new`} replace />}
-        />
-        <Route
-          path="model-providers/:serviceType/:providerId"
+          path="/model-providers/:serviceType/:providerId"
           element={<ModelProviderEditorRedirect />}
         />
-        <Route path="agents" element={<DesktopAgentsPage />} />
-      </Route>
-      <Route path="/model-providers" element={<ModelProvidersRedirect />} />
-      <Route path="/model-providers/new" element={<ModelProviderEditorRedirect />} />
-      <Route
-        path="/model-providers/:serviceType/:providerId"
-        element={<ModelProviderEditorRedirect />}
-      />
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<Navigate to="/terminal" replace />} />
-        <Route path="/terminal" element={<TerminalPage />} />
-        <Route path="/model-chat" element={<ModelChatPage />} />
-        <Route path="/automation" element={<AutomationJobsPage />} />
-        <Route path="/automation/workflows" element={<AutomationWorkflowsPage />} />
-        <Route path="/automation/workflows/new" element={<AutomationWorkflowEditorPage />} />
-        <Route path="/automation/workflows/:workflowId" element={<AutomationWorkflowEditorPage />} />
-        <Route path="/automation/new" element={<AutomationJobEditorPage />} />
-        <Route path="/automation/jobs/new" element={<AutomationJobEditorPage />} />
-        <Route path="/automation/jobs/:jobId" element={<AutomationJobEditorPage />} />
-      </Route>
-    </Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Navigate to="/terminal" replace />} />
+          <Route path="/terminal" element={<TerminalPage />} />
+          <Route path="/model-chat" element={<ModelChatPage />} />
+          <Route path="/automation" element={<AutomationJobsPage />} />
+          <Route path="/automation/workflows" element={<AutomationWorkflowsPage />} />
+          <Route path="/automation/workflows/new" element={<AutomationWorkflowEditorPage />} />
+          <Route path="/automation/workflows/:workflowId" element={<AutomationWorkflowEditorPage />} />
+          <Route path="/automation/new" element={<AutomationJobEditorPage />} />
+          <Route path="/automation/jobs/new" element={<AutomationJobEditorPage />} />
+          <Route path="/automation/jobs/:jobId" element={<AutomationJobEditorPage />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }
 

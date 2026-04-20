@@ -617,6 +617,7 @@ struct ModelProviderConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct ApiChatMessage {
     id: String,
     role: String,
@@ -1360,6 +1361,7 @@ fn collect_system_prompt(messages: &[ApiChatMessage]) -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 fn collapse_chat_messages(
     messages: &[ApiChatMessage],
     assistant_role: &str,
@@ -1651,6 +1653,7 @@ fn build_gemini_api_chat_contents(messages: &[ApiChatMessage]) -> Result<Vec<Val
     Ok(payload)
 }
 
+#[allow(dead_code)]
 fn value_text_parts(value: &Value) -> Vec<String> {
     match value {
         Value::String(text) => {
@@ -1827,6 +1830,7 @@ fn fetch_provider_models(
     Ok(models)
 }
 
+#[allow(dead_code)]
 fn parse_openai_response_text(value: &Value) -> Option<String> {
     value
         .get("choices")
@@ -1848,6 +1852,7 @@ fn parse_openai_response_text(value: &Value) -> Option<String> {
         })
 }
 
+#[allow(dead_code)]
 fn parse_claude_response_text(value: &Value) -> Option<String> {
     value
         .get("content")
@@ -1863,6 +1868,7 @@ fn parse_claude_response_text(value: &Value) -> Option<String> {
         .filter(|text| !text.trim().is_empty())
 }
 
+#[allow(dead_code)]
 fn parse_gemini_response_text(value: &Value) -> Option<String> {
     value
         .get("candidates")
@@ -3495,7 +3501,6 @@ struct RuntimeLogSession {
 
 #[derive(Debug, Clone)]
 struct LiveCodexTurnTarget {
-    child_pid: u32,
     writer: SharedChildStdin,
     next_id: SharedRpcCounter,
     thread_id: Option<String>,
@@ -3505,7 +3510,6 @@ struct LiveCodexTurnTarget {
 
 #[derive(Debug, Clone)]
 struct LiveGeminiTurnTarget {
-    child_pid: u32,
     writer: SharedChildStdin,
     session_id: Option<String>,
     interrupt_sent: bool,
@@ -3513,7 +3517,6 @@ struct LiveGeminiTurnTarget {
 
 #[derive(Debug, Clone)]
 struct LiveProcessTurnTarget {
-    cli_id: String,
     child_pid: u32,
     interrupt_sent: bool,
 }
@@ -3528,8 +3531,6 @@ enum LiveChatTurnTarget {
 
 #[derive(Debug)]
 struct LiveChatTurnHandle {
-    terminal_tab_id: String,
-    message_id: String,
     interrupted_by_user: AtomicBool,
     target: Mutex<LiveChatTurnTarget>,
 }
@@ -4426,9 +4427,8 @@ fn live_chat_turn_key(terminal_tab_id: &str, message_id: &str) -> String {
 }
 
 fn new_live_chat_turn_handle(terminal_tab_id: &str, message_id: &str) -> Arc<LiveChatTurnHandle> {
+    let _ = (terminal_tab_id, message_id);
     Arc::new(LiveChatTurnHandle {
-        terminal_tab_id: terminal_tab_id.to_string(),
-        message_id: message_id.to_string(),
         interrupted_by_user: AtomicBool::new(false),
         target: Mutex::new(LiveChatTurnTarget::Idle),
     })
@@ -6748,7 +6748,6 @@ fn run_codex_app_server_turn(
         set_live_chat_turn_target(
             handle,
             LiveChatTurnTarget::Codex(LiveCodexTurnTarget {
-                child_pid: child.id(),
                 writer: stdin.clone(),
                 next_id: next_id.clone(),
                 thread_id: previous_transport_session
@@ -7939,7 +7938,6 @@ fn run_claude_headless_turn_once(
         set_live_chat_turn_target(
             handle,
             LiveChatTurnTarget::Process(LiveProcessTurnTarget {
-                cli_id: "claude".to_string(),
                 child_pid: child.id(),
                 interrupt_sent: false,
             }),
@@ -8256,7 +8254,6 @@ fn run_gemini_acp_turn(
         set_live_chat_turn_target(
             handle,
             LiveChatTurnTarget::Gemini(LiveGeminiTurnTarget {
-                child_pid: child.id(),
                 writer: stdin.clone(),
                 session_id: previous_transport_session
                     .as_ref()
@@ -12178,7 +12175,6 @@ fn send_chat_message(
         set_live_chat_turn_target(
             &shell_live_turn,
             LiveChatTurnTarget::Process(LiveProcessTurnTarget {
-                cli_id: agent_id.clone(),
                 child_pid: child.id(),
                 interrupt_sent: false,
             }),
@@ -13898,6 +13894,7 @@ fn split_choice_values(raw: &str) -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn git_command_output(project_root: &str, args: &[&str]) -> Result<std::process::Output, String> {
     let mut command = Command::new("git");
     command.args(args).current_dir(project_root);
@@ -13906,6 +13903,7 @@ fn git_command_output(project_root: &str, args: &[&str]) -> Result<std::process:
     command.output().map_err(|err| err.to_string())
 }
 
+#[allow(dead_code)]
 fn git_command_status(project_root: &str, args: &[&str]) -> Result<(), String> {
     let mut command = Command::new("git");
     command.args(args).current_dir(project_root);
@@ -13995,6 +13993,7 @@ fn parse_git_log_entries_from_stdout(stdout: &str) -> Vec<GitLogEntry> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn parse_git_log_entries(project_root: &str, args: &[&str]) -> Vec<GitLogEntry> {
     let Ok(output) = git_command_output(project_root, args) else {
         return Vec::new();
@@ -14044,6 +14043,7 @@ fn parse_git_history_commits_from_stdout(stdout: &str) -> Vec<GitHistoryCommit> 
         .collect()
 }
 
+#[allow(dead_code)]
 fn parse_git_history_commits(project_root: &str, revision: Option<&str>) -> Vec<GitHistoryCommit> {
     let mut command = Command::new("git");
     command.current_dir(project_root);
@@ -14085,6 +14085,7 @@ fn normalize_remote_target_branch(remote_name: &str, branch_name: &str) -> Strin
     branch_trimmed.to_string()
 }
 
+#[allow(dead_code)]
 fn parse_git_history_commits_with_args(
     project_root: &str,
     revisions: &[String],
@@ -14397,6 +14398,7 @@ fn build_git_commit_history_for_target(
     }
 }
 
+#[allow(dead_code)]
 fn git_head_snapshot_id(project_root: &str) -> String {
     git_output(project_root, &["rev-parse", "HEAD"])
         .unwrap_or_else(|| format!("snapshot-{}", Local::now().timestamp_millis()))
@@ -14407,6 +14409,7 @@ fn git_head_snapshot_id_for_target(target: &WorkspaceTarget) -> String {
         .unwrap_or_else(|| format!("snapshot-{}", Local::now().timestamp_millis()))
 }
 
+#[allow(dead_code)]
 fn git_status_letter(status: &str) -> String {
     match status {
         "added" => "A".to_string(),
@@ -14453,6 +14456,7 @@ fn parse_git_diff_tree_name_status_from_stdout(
         .collect()
 }
 
+#[allow(dead_code)]
 fn parse_git_diff_tree_name_status(
     project_root: &str,
     commit: &str,
@@ -14500,6 +14504,7 @@ fn parse_git_diff_tree_name_status_for_target(
     .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 fn parse_git_diff_tree_numstat(project_root: &str, commit: &str) -> HashMap<String, (u32, u32)> {
     let mut command = Command::new("git");
     command.current_dir(project_root);
@@ -14525,6 +14530,7 @@ fn parse_git_diff_tree_numstat_for_target(
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 fn git_commit_file_diff(project_root: &str, commit: &str, path: &str) -> String {
     let mut command = Command::new("git");
     command.current_dir(project_root);
@@ -14904,6 +14910,7 @@ fn build_git_commit_details_for_target(
     }
 }
 
+#[allow(dead_code)]
 fn get_git_upstream(project_root: &str) -> Option<String> {
     git_output(
         project_root,
@@ -14981,6 +14988,7 @@ fn parse_branch_ref_lines(
         .collect()
 }
 
+#[allow(dead_code)]
 fn parse_branch_ref_lines_for_target(
     target: &WorkspaceTarget,
     args: &[&str],
@@ -15233,8 +15241,9 @@ fn github_api_get_json(url: &str) -> Result<Value, String> {
     response.json::<Value>().map_err(|err| err.to_string())
 }
 
+#[allow(dead_code)]
 fn parse_numstat_output(project_root: &str, args: &[&str]) -> HashMap<String, (u32, u32)> {
-    let mut stats = HashMap::new();
+    let stats = HashMap::new();
     let Ok(output) = git_command_output(project_root, args) else {
         return stats;
     };
@@ -15400,6 +15409,7 @@ fn status_from_code(status_char: char) -> String {
     .to_string()
 }
 
+#[allow(dead_code)]
 fn build_git_file_statuses(
     project_root: &str,
 ) -> Result<(Vec<GitFileStatus>, Vec<GitFileStatus>), String> {
@@ -17950,7 +17960,7 @@ fn ensure_pty_session(
         })
         .map_err(|err| err.to_string())?;
 
-    let mut command = match &workspace_target {
+    let command = match &workspace_target {
         WorkspaceTarget::Local { project_root } => {
             let shell = shell_path();
             let mut command = CommandBuilder::new(shell.clone());
@@ -19500,7 +19510,6 @@ fn run_silent_agent_turn_once(
         set_live_chat_turn_target(
             handle,
             LiveChatTurnTarget::Process(LiveProcessTurnTarget {
-                cli_id: agent_id.to_string(),
                 child_pid: child.id(),
                 interrupt_sent: false,
             }),
@@ -19541,8 +19550,6 @@ fn run_silent_agent_turn_once(
 struct AutomationExecutionOutcome {
     owner_cli: String,
     raw_output: String,
-    final_content: String,
-    content_format: String,
     summary: String,
     exit_code: Option<i32>,
     blocks: Vec<ChatMessageBlock>,
@@ -20773,8 +20780,6 @@ fn execute_auto_mode_goal(
             return AutomationExecutionOutcome {
                 owner_cli: "claude".to_string(),
                 raw_output: error.clone(),
-                final_content: error.clone(),
-                content_format: "log".to_string(),
                 summary: error,
                 exit_code: Some(1),
                 blocks: vec![ChatMessageBlock::Status {
@@ -21066,8 +21071,6 @@ fn execute_auto_mode_goal(
     AutomationExecutionOutcome {
         owner_cli: "claude".to_string(),
         raw_output: final_content.clone(),
-        final_content: final_content.clone(),
-        content_format: "log".to_string(),
         summary: display_summary(&final_content),
         exit_code: Some(if encountered_failure { 1 } else { 0 }),
         blocks,
@@ -22073,8 +22076,6 @@ fn execute_automation_goal(
             return AutomationExecutionOutcome {
                 owner_cli: owner_cli.to_string(),
                 raw_output: error.clone(),
-                final_content: error.clone(),
-                content_format: "log".to_string(),
                 summary: error,
                 exit_code: Some(1),
                 blocks: vec![ChatMessageBlock::Status {
@@ -22323,7 +22324,7 @@ fn execute_automation_goal(
         .collect::<Vec<_>>();
 
     match execution {
-        Ok((raw_output, final_content, content_format, exit_code, blocks, transport_session)) => {
+        Ok((raw_output, final_content, _content_format, exit_code, blocks, transport_session)) => {
             let raw = if raw_output.trim().is_empty() {
                 final_content.clone()
             } else {
@@ -22332,12 +22333,6 @@ fn execute_automation_goal(
             let outcome = AutomationExecutionOutcome {
                 owner_cli: owner_cli.to_string(),
                 raw_output: raw.clone(),
-                final_content: if final_content.trim().is_empty() {
-                    raw.clone()
-                } else {
-                    final_content.clone()
-                },
-                content_format,
                 summary: display_summary(&raw),
                 exit_code,
                 blocks: blocks.clone(),
@@ -22360,8 +22355,6 @@ fn execute_automation_goal(
             let outcome = AutomationExecutionOutcome {
                 owner_cli: owner_cli.to_string(),
                 raw_output: error.clone(),
-                final_content: error.clone(),
-                content_format: "log".to_string(),
                 summary: display_summary(&error),
                 exit_code: Some(1),
                 blocks: vec![ChatMessageBlock::Status {
@@ -24896,6 +24889,7 @@ fn emit_runtime_log_exited(app: &AppHandle, snapshot: RuntimeLogSessionSnapshot)
     let _ = app.emit("runtime-log:session-exited", snapshot);
 }
 
+#[allow(dead_code)]
 fn resolve_runtime_workspace_root(store: &AppStore, workspace_id: &str) -> Result<String, String> {
     if let Some(state) = store.terminal_storage.load_state()? {
         if let Some(workspace) = state.workspaces.iter().find(|item| item.id == workspace_id) {
@@ -25868,6 +25862,7 @@ fn collect_workspace_files(
     Ok(())
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn parse_selected_paths_output(output: &[u8]) -> Vec<String> {
     String::from_utf8_lossy(output)
         .lines()
@@ -25877,6 +25872,7 @@ fn parse_selected_paths_output(output: &[u8]) -> Vec<String> {
         .collect()
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn to_picked_chat_attachments(paths: Vec<String>) -> Vec<PickedChatAttachment> {
     paths
         .into_iter()
