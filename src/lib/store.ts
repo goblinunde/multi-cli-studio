@@ -1225,7 +1225,7 @@ export const useStore = create<StoreState>((set, get) => {
   },
 
   loadInitialState: async (projectRoot) => {
-    const state = await bridge.loadAppState(projectRoot);
+    const state = await bridge.loadAppState(projectRoot, true);
     let workspaces: WorkspaceRef[] = [];
     let terminalTabs: TerminalTab[] = [];
     let chatSessions: Record<string, ConversationSession> = {};

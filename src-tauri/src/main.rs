@@ -77,6 +77,7 @@ const RUNTIME_LOG_TERMINAL_ID: &str = "runtime-console";
 const DEFAULT_MAX_TURNS: usize = 50;
 const DEFAULT_MAX_OUTPUT_CHARS: usize = 100_000;
 const DEFAULT_TIMEOUT_MS: u64 = 300_000;
+const RUNTIME_DETECTION_TIMEOUT_MS: u64 = 1_500;
 const SSH_ASKPASS_PASSWORD_ENV: &str = "MULTI_CLI_STUDIO_SSH_PASSWORD";
 
 #[cfg(target_os = "windows")]
@@ -22966,7 +22967,7 @@ fn detect_runtimes() -> BTreeMap<String, AgentRuntime> {
 
         let version_probe = command_path
             .as_ref()
-            .and_then(|path| run_cli_command(path, &[version_flag]));
+            .and_then(|path| run_cli_command(path, &[version_flag], RUNTIME_DETECTION_TIMEOUT_MS));
         let version = version_probe
             .as_ref()
             .and_then(|output| successful_cli_output(output));
@@ -24895,19 +24896,73 @@ fn spawn_runtime_exit_watcher(
     });
 }
 
-fn run_cli_command(command_path: &str, args: &[&str]) -> Option<CliCommandOutput> {
+fn run_cli_command(command_path: &str, args: &[&str], timeout_ms: u64) -> Option<CliCommandOutput> {
     let resolved_command = resolve_direct_command_path(command_path);
-    let output = batch_aware_command(&resolved_command, args).output().ok()?;
+    let mut command = batch_aware_command(&resolved_command, args);
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    apply_runtime_environment(&mut command);
+
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let mut child = command.spawn().ok()?;
+    let child_id = child.id();
+    let completed = Arc::new(AtomicBool::new(false));
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let completed_flag = completed.clone();
+    let timed_out_flag = timed_out.clone();
+
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(timeout_ms));
+        if completed_flag.load(Ordering::SeqCst) {
+            return;
+        }
+        timed_out_flag.store(true, Ordering::SeqCst);
+        #[cfg(target_os = "windows")]
+        {
+            let _ = Command::new("taskkill")
+                .args(["/PID", &child_id.to_string(), "/T", "/F"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = Command::new("kill")
+                .args(["-9", &child_id.to_string()])
+                .output();
+        }
+    });
+
+    let status = child.wait().ok()?;
+    completed.store(true, Ordering::SeqCst);
+
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    if let Some(mut handle) = child.stdout.take() {
+        let _ = handle.read_to_string(&mut stdout);
+    }
+    if let Some(mut handle) = child.stderr.take() {
+        let _ = handle.read_to_string(&mut stderr);
+    }
+
+    if timed_out.load(Ordering::SeqCst) {
+        let trimmed_stderr = stderr.trim();
+        stderr = if trimmed_stderr.is_empty() {
+            format!("CLI version probe timed out after {}ms.", timeout_ms)
+        } else {
+            format!("{}\nCLI version probe timed out after {}ms.", trimmed_stderr, timeout_ms)
+        };
+    }
 
     Some(CliCommandOutput {
-        success: output.status.success(),
-        stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        success: status.success() && !timed_out.load(Ordering::SeqCst),
+        stdout: stdout.trim().to_string(),
+        stderr: stderr.trim().to_string(),
     })
 }
 
 fn run_cli_command_capture(command_path: &str, args: &[&str]) -> Option<String> {
-    let output = run_cli_command(command_path, args)?;
+    let output = run_cli_command(command_path, args, DEFAULT_TIMEOUT_MS)?;
     let stdout = output.stdout;
     let stderr = output.stderr;
 
@@ -25082,6 +25137,9 @@ fn runtime_search_dirs() -> Vec<PathBuf> {
             home.join("Library").join("pnpm"),
             home.join(".pnpm"),
             home.join(".npm-global").join("bin"),
+            home.join(".nvm").join("current").join("bin"),
+            home.join(".nodebrew").join("current").join("bin"),
+            home.join("bin"),
         ] {
             append_candidate_dir(&mut candidates, dir);
         }
@@ -26784,6 +26842,7 @@ pub fn run() {
         load_or_seed_state(&project_root).unwrap_or_else(|_| seed_state(&project_root));
     sync_workspace_metrics(&mut initial_state);
     sync_agent_runtime(&mut initial_state);
+    let _ = persist_state(&initial_state);
     let startup_state = Arc::new(Mutex::new(initial_state));
     let startup_context = Arc::new(Mutex::new(
         load_or_seed_context(&project_root).unwrap_or_else(|_| seed_context()),
