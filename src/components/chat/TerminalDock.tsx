@@ -83,6 +83,20 @@ function createDockTerminalTab(defaults?: {
   };
 }
 
+function formatTerminalError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 function XtermSurface({
   terminalTabId,
   workspaceId,
@@ -100,6 +114,7 @@ function XtermSurface({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const initialContentRef = useRef(initialContent);
+  const sessionReadyRef = useRef(false);
 
   useEffect(() => {
     initialContentRef.current = initialContent;
@@ -134,29 +149,49 @@ function XtermSurface({
     }
 
     const dataDisposable = terminal.onData((data) => {
-      void bridge.writePtyInput({ terminalTabId, data });
+      if (!sessionReadyRef.current) return;
+      void bridge.writePtyInput({ terminalTabId, data }).catch(() => undefined);
     });
-
-    void bridge.ensurePtySession({
-      terminalTabId,
-      workspaceId,
-      cwd,
-      cols: terminal.cols,
-      rows: terminal.rows,
-    });
+    let cancelled = false;
 
     const resizeObserver = new ResizeObserver(() => {
       if (!terminalRef.current || !fitAddonRef.current) return;
       fitAddonRef.current.fit();
+      if (!sessionReadyRef.current) return;
       void bridge.resizePtySession({
         terminalTabId,
         cols: terminalRef.current.cols,
         rows: terminalRef.current.rows,
-      });
+      }).catch(() => undefined);
     });
     resizeObserver.observe(hostRef.current);
 
+    void bridge
+      .ensurePtySession({
+        terminalTabId,
+        workspaceId,
+        cwd,
+        cols: terminal.cols,
+        rows: terminal.rows,
+      })
+      .then(() => {
+        if (cancelled) return;
+        sessionReadyRef.current = true;
+        void bridge.resizePtySession({
+          terminalTabId,
+          cols: terminal.cols,
+          rows: terminal.rows,
+        }).catch(() => undefined);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        terminal.writeln("");
+        terminal.writeln(`[failed to start terminal] ${formatTerminalError(error)}`);
+      });
+
     return () => {
+      cancelled = true;
+      sessionReadyRef.current = false;
       resizeObserver.disconnect();
       dataDisposable.dispose();
       terminal.dispose();
@@ -260,7 +295,7 @@ export function TerminalDock({
     const removed = previous.filter((id) => !current.includes(id));
     removed.forEach((id) => {
       delete outputBuffersRef.current[id];
-      void bridge.closePtySession(id);
+      void bridge.closePtySession(id).catch(() => undefined);
     });
     previousTabIdsRef.current = current;
   }, [terminalTabs]);
@@ -319,7 +354,7 @@ export function TerminalDock({
   }
 
   function handleCloseTab(tabId: string) {
-    void bridge.closePtySession(tabId);
+    void bridge.closePtySession(tabId).catch(() => undefined);
     delete outputBuffersRef.current[tabId];
     setTerminalTabs((current) => {
       const nextTabs = current.filter((tab) => tab.id !== tabId);

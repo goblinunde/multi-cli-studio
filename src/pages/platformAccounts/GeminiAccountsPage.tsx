@@ -47,6 +47,7 @@ export function GeminiAccountsPage() {
   const [oauthCallback, setOauthCallback] = useState("");
   const [oauthBusy, setOauthBusy] = useState(false);
   const [oauthAwaitingCallback, setOauthAwaitingCallback] = useState(false);
+  const [oauthReadyToComplete, setOauthReadyToComplete] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState("");
   const [importInput, setImportInput] = useState("");
@@ -103,23 +104,81 @@ export function GeminiAccountsPage() {
     return message.includes("OAuth 已取消") || message.includes("被新的登录请求替换");
   }
 
-  async function waitForOAuthCompletion(loginId: string) {
-    setOauthAwaitingCallback(true);
+  async function completeOAuthLogin(loginId: string) {
+    setOauthBusy(true);
     setOauthError(null);
     try {
       await geminiService.completeGeminiOAuthLogin(loginId);
       await store.fetchAccounts();
       setOauthState((current) => (current?.loginId === loginId ? null : current));
+      setOauthAwaitingCallback(false);
+      setOauthReadyToComplete(false);
       setOauthCallback("");
     } catch (error) {
       const message = String(error);
-      if (!isOauthCancellationError(message)) {
+      if (isOauthCancellationError(message)) {
+        setOauthState(null);
+        setOauthAwaitingCallback(false);
+        setOauthReadyToComplete(false);
+        setOauthCallback("");
+      } else {
         setOauthError(message);
+        setOauthAwaitingCallback(false);
       }
     } finally {
-      setOauthAwaitingCallback(false);
+      setOauthBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!oauthState || !oauthAwaitingCallback || oauthReadyToComplete || oauthBusy) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const status = await geminiService.getGeminiOAuthLoginStatus(oauthState.loginId);
+        if (cancelled) return;
+
+        if (status.status === "ready") {
+          setOauthReadyToComplete(true);
+          void completeOAuthLogin(oauthState.loginId);
+          return;
+        }
+
+        if (status.status === "expired") {
+          setOauthState(null);
+          setOauthAwaitingCallback(false);
+          setOauthReadyToComplete(false);
+          setOauthError("Gemini OAuth 已过期，请重新开始登录。");
+          return;
+        }
+
+        if (status.status === "cancelled" || status.status === "replaced") {
+          setOauthState(null);
+          setOauthAwaitingCallback(false);
+          setOauthReadyToComplete(false);
+          if (status.status === "replaced") {
+            setOauthError("Gemini OAuth 流程已被新的登录请求替换。");
+          }
+        }
+      } catch {
+        // Ignore transient polling failures while the browser login is in progress.
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => {
+      void poll();
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [oauthAwaitingCallback, oauthBusy, oauthReadyToComplete, oauthState]);
 
   async function handleStartOAuth() {
     setOauthBusy(true);
@@ -128,7 +187,8 @@ export function GeminiAccountsPage() {
       const next = await geminiService.startGeminiOAuthLogin();
       setOauthState(next);
       setOauthCallback("");
-      void waitForOAuthCompletion(next.loginId);
+      setOauthAwaitingCallback(true);
+      setOauthReadyToComplete(false);
       if (!isTauriRuntime()) {
         window.open(next.verificationUri, "_blank", "noopener,noreferrer");
       }
@@ -144,6 +204,8 @@ export function GeminiAccountsPage() {
     try {
       await geminiService.cancelGeminiOAuthLogin(oauthState.loginId);
       setOauthState(null);
+      setOauthAwaitingCallback(false);
+      setOauthReadyToComplete(false);
       setOauthCallback("");
     } finally {
       setOauthBusy(false);
@@ -160,9 +222,15 @@ export function GeminiAccountsPage() {
         oauthCallback.trim()
       );
       setOauthCallback("");
+      setOauthAwaitingCallback(true);
     } finally {
       setOauthBusy(false);
     }
+  }
+
+  async function handleCompleteOAuth() {
+    if (!oauthState) return;
+    void completeOAuthLogin(oauthState.loginId);
   }
 
   async function handleManualAdd() {
@@ -263,8 +331,25 @@ export function GeminiAccountsPage() {
                   <>
                     <div className="inline-flex items-center gap-2 rounded-[12px] border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
                       <RefreshCw className={oauthAwaitingCallback ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-                      <span>{oauthAwaitingCallback ? "等待浏览器回调..." : "已启动登录"}</span>
+                      <span>
+                        {oauthBusy
+                          ? "完成登录中..."
+                          : oauthReadyToComplete
+                            ? "已收到浏览器回调"
+                            : oauthAwaitingCallback
+                              ? "等待浏览器回调..."
+                              : "已启动登录"}
+                      </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleCompleteOAuth()}
+                      disabled={oauthBusy || !oauthReadyToComplete}
+                      className="inline-flex items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Check className="h-4 w-4" />
+                      <span>完成登录</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => void handleCancelOAuth()}

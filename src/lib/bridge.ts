@@ -112,6 +112,20 @@ export type RuntimeProfileDescriptor = {
   detectedStack: string;
 };
 
+function formatBridgeError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 export interface RuntimeBridge {
   loadAppState: (projectRoot?: string, refreshRuntime?: boolean) => Promise<AppState>;
   switchActiveAgent: (agentId: AgentId) => Promise<AppState>;
@@ -834,7 +848,14 @@ const tauriRuntime: RuntimeBridge = {
   },
   async pickWorkspaceFolder() {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<WorkspacePickResult | null>("pick_workspace_folder");
+    try {
+      return await invoke<WorkspacePickResult | null>("pick_workspace_folder");
+    } catch (error) {
+      if (typeof window !== "undefined") {
+        window.alert(`无法打开项目目录选择器。\n\n${formatBridgeError(error)}`);
+      }
+      return null;
+    }
   },
   async pickChatAttachments() {
     const { invoke } = await import("@tauri-apps/api/core");

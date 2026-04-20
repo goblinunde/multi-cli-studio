@@ -9,8 +9,21 @@ export interface GeminiOAuthLoginStartResponse {
   callbackUrl?: string | null;
 }
 
+export interface GeminiOAuthLoginStatusResponse {
+  loginId: string;
+  status: "waiting" | "ready" | "expired" | "cancelled" | "replaced";
+  callbackUrl?: string | null;
+  expiresAt?: number | null;
+}
+
 export async function startGeminiOAuthLogin(): Promise<GeminiOAuthLoginStartResponse> {
   return await invoke("gemini_oauth_login_start");
+}
+
+export async function getGeminiOAuthLoginStatus(
+  loginId: string
+): Promise<GeminiOAuthLoginStatusResponse> {
+  return await invoke("gemini_oauth_login_status", { loginId });
 }
 
 export async function completeGeminiOAuthLogin(loginId: string): Promise<GeminiAccount> {
@@ -74,4 +87,3 @@ export async function updateGeminiAccountTags(
 export async function injectGeminiAccount(accountId: string): Promise<string> {
   return await invoke("switch_gemini_account", { accountId });
 }
-

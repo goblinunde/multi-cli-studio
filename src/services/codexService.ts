@@ -7,6 +7,13 @@ export interface CodexOAuthLoginStartResponse {
   callbackUrl?: string | null;
 }
 
+export interface CodexOAuthLoginStatusResponse {
+  loginId: string;
+  status: "waiting" | "ready" | "expired" | "cancelled" | "replaced";
+  callbackUrl?: string | null;
+  expiresAt?: number | null;
+}
+
 export async function listCodexAccounts(): Promise<CodexAccount[]> {
   return await invoke("list_codex_accounts");
 }
@@ -49,6 +56,12 @@ export async function refreshAllCodexQuotas(): Promise<number> {
 
 export async function startCodexOAuthLogin(): Promise<CodexOAuthLoginStartResponse> {
   return await invoke("codex_oauth_login_start");
+}
+
+export async function getCodexOAuthLoginStatus(
+  loginId: string
+): Promise<CodexOAuthLoginStatusResponse> {
+  return await invoke("codex_oauth_login_status", { loginId });
 }
 
 export async function completeCodexOAuthLogin(loginId: string): Promise<CodexAccount> {
@@ -118,4 +131,3 @@ export async function updateCodexAccountTags(
 ): Promise<CodexAccount> {
   return await invoke("update_codex_account_tags", { accountId, tags });
 }
-

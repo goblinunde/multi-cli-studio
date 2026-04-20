@@ -1133,10 +1133,7 @@ enum PlatformAutoRefreshKind {
     Kiro,
 }
 
-fn platform_auto_refresh_minutes(
-    settings: &AppSettings,
-    platform: PlatformAutoRefreshKind,
-) -> i32 {
+fn platform_auto_refresh_minutes(settings: &AppSettings, platform: PlatformAutoRefreshKind) -> i32 {
     match platform {
         PlatformAutoRefreshKind::Codex => settings.codex_auto_refresh_minutes,
         PlatformAutoRefreshKind::Gemini => settings.gemini_auto_refresh_minutes,
@@ -16577,19 +16574,27 @@ fn open_workspace_in(
 
     let status = if let Some(command_name) = normalized_command {
         let resolved_command = resolve_command_path(&command_name).unwrap_or(command_name);
-        let mut command_args = args.iter().map(String::as_str).collect::<Vec<_>>();
-        command_args.push(path_string.as_str());
-        batch_aware_command(&resolved_command, &command_args)
+        let resolved_args = resolve_workspace_open_args(&args, &path_string);
+        let command_args = resolved_args.iter().map(String::as_str).collect::<Vec<_>>();
+        let mut command = batch_aware_command(&resolved_command, &command_args);
+        command.current_dir(&absolute_path);
+        command
             .status()
             .map_err(|error| format!("Failed to open workspace ({target_label}): {error}"))?
     } else if let Some(app_name) = normalized_app {
         #[cfg(target_os = "macos")]
         let status = {
+            let uses_path_placeholder = workspace_open_args_include_placeholder(&args);
+            let resolved_args = resolve_workspace_open_args(&args, &path_string);
             let mut command = Command::new("open");
-            command.arg("-a").arg(&app_name).arg(&absolute_path);
-            if !args.is_empty() {
-                command.arg("--args").args(&args);
+            command.arg("-a").arg(&app_name);
+            if !uses_path_placeholder {
+                command.arg(&absolute_path);
             }
+            if !resolved_args.is_empty() {
+                command.arg("--args").args(&resolved_args);
+            }
+            command.current_dir(&absolute_path);
             apply_runtime_environment(&mut command);
             command
                 .status()
@@ -16598,7 +16603,7 @@ fn open_workspace_in(
 
         #[cfg(not(target_os = "macos"))]
         let status =
-            open_workspace_with_non_macos_app(&app_name, &args, &path_string, &target_label)?;
+            open_workspace_with_non_macos_app(&app_name, &args, &absolute_path, &target_label)?;
 
         status
     } else {
@@ -16616,6 +16621,26 @@ fn open_workspace_in(
     Err(format!(
         "Failed to open workspace ({target_label} returned {exit_detail})."
     ))
+}
+
+const WORKSPACE_PATH_PLACEHOLDER: &str = "{path}";
+
+fn workspace_open_args_include_placeholder(args: &[String]) -> bool {
+    args.iter()
+        .any(|value| value.contains(WORKSPACE_PATH_PLACEHOLDER))
+}
+
+fn resolve_workspace_open_args(args: &[String], workspace_path: &str) -> Vec<String> {
+    let mut resolved = args
+        .iter()
+        .map(|value| value.replace(WORKSPACE_PATH_PLACEHOLDER, workspace_path))
+        .collect::<Vec<_>>();
+
+    if !workspace_open_args_include_placeholder(args) {
+        resolved.push(workspace_path.to_string());
+    }
+
+    resolved
 }
 
 fn normalize_open_target_value(value: Option<String>) -> Option<String> {
@@ -16749,16 +16774,19 @@ fn open_app_command_candidates(app: &str) -> Vec<String> {
 fn open_workspace_with_non_macos_app(
     app: &str,
     args: &[String],
-    path: &str,
+    path: &Path,
     target_label: &str,
 ) -> Result<std::process::ExitStatus, String> {
     let mut last_not_found_error: Option<std::io::Error> = None;
+    let path_string = path.to_string_lossy().to_string();
+    let resolved_args = resolve_workspace_open_args(args, &path_string);
+    let command_args = resolved_args.iter().map(String::as_str).collect::<Vec<_>>();
 
     for candidate in open_app_command_candidates(app) {
         let resolved_candidate = resolve_command_path(&candidate).unwrap_or(candidate);
-        let mut command_args = args.iter().map(String::as_str).collect::<Vec<_>>();
-        command_args.push(path);
-        match batch_aware_command(&resolved_candidate, &command_args).status() {
+        let mut command = batch_aware_command(&resolved_candidate, &command_args);
+        command.current_dir(path);
+        match command.status() {
             Ok(status) => return Ok(status),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 last_not_found_error = Some(error);
@@ -16809,6 +16837,23 @@ fn open_workspace_with_default_app(path: &Path) -> Result<std::process::ExitStat
     command
         .status()
         .map_err(|error| format!("Failed to open workspace (default opener): {error}"))
+}
+
+fn workspace_pick_result_from_selection(selected: &str) -> Option<WorkspacePickResult> {
+    let trimmed = selected.trim().trim_matches('"').trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let name = Path::new(trimmed)
+        .file_name()
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_else(|| "workspace".to_string());
+
+    Some(WorkspacePickResult {
+        name,
+        root_path: trimmed.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -26017,7 +26062,121 @@ end try"#,
 
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 fn pick_workspace_folder_impl() -> Result<Option<WorkspacePickResult>, String> {
-    Err("Workspace picking is not implemented on this platform yet.".to_string())
+    fn run_linux_workspace_picker_command(
+        command_path: &str,
+        args: &[&str],
+    ) -> Result<Option<String>, String> {
+        let mut command = Command::new(command_path);
+        command.args(args);
+        apply_runtime_environment(&mut command);
+        let output = command.output().map_err(|err| err.to_string())?;
+
+        if output.status.success() {
+            let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if selected.is_empty() {
+                return Ok(None);
+            }
+            return Ok(Some(selected));
+        }
+
+        if matches!(output.status.code(), Some(1) | Some(130)) {
+            return Ok(None);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.is_empty() {
+            Err(format!(
+                "picker command exited with status {:?}",
+                output.status.code()
+            ))
+        } else {
+            Err(stderr)
+        }
+    }
+
+    let mut errors = Vec::new();
+
+    for candidate in ["zenity", "qarma"] {
+        let Some(command_path) = resolve_command_path(candidate) else {
+            continue;
+        };
+
+        match run_linux_workspace_picker_command(
+            &command_path,
+            &[
+                "--file-selection",
+                "--directory",
+                "--title=Choose a workspace folder",
+            ],
+        ) {
+            Ok(Some(selected)) => return Ok(workspace_pick_result_from_selection(&selected)),
+            Ok(None) => return Ok(None),
+            Err(error) => errors.push(format!("{candidate}: {error}")),
+        }
+    }
+
+    if let Some(command_path) = resolve_command_path("kdialog") {
+        let home = user_home_dir().to_string_lossy().to_string();
+        match run_linux_workspace_picker_command(
+            &command_path,
+            &[
+                "--getexistingdirectory",
+                home.as_str(),
+                "--title",
+                "Choose a workspace folder",
+            ],
+        ) {
+            Ok(Some(selected)) => return Ok(workspace_pick_result_from_selection(&selected)),
+            Ok(None) => return Ok(None),
+            Err(error) => errors.push(format!("kdialog: {error}")),
+        }
+    }
+
+    if let Some(command_path) =
+        resolve_command_path("python3").or_else(|| resolve_command_path("python"))
+    {
+        let script = r#"
+import os
+import sys
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+except Exception as exc:
+    raise SystemExit(str(exc))
+
+root = tk.Tk()
+root.withdraw()
+root.attributes("-topmost", True)
+root.update()
+selected = filedialog.askdirectory(
+    title="Choose a workspace folder",
+    initialdir=os.path.expanduser("~"),
+    mustexist=True,
+)
+root.destroy()
+if selected:
+    print(selected)
+"#;
+
+        match run_linux_workspace_picker_command(&command_path, &["-c", script]) {
+            Ok(Some(selected)) => return Ok(workspace_pick_result_from_selection(&selected)),
+            Ok(None) => return Ok(None),
+            Err(error) => errors.push(format!("python: {error}")),
+        }
+    }
+
+    if errors.is_empty() {
+        Err(
+            "Workspace picking is unavailable on this platform. Install zenity, qarma, kdialog, or python3 with Tk support."
+                .to_string(),
+        )
+    } else {
+        Err(format!(
+            "Workspace picking is unavailable: {}",
+            errors.join(" | ")
+        ))
+    }
 }
 
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
@@ -27478,8 +27637,11 @@ pub fn run() {
             platform_accounts::list_gemini_accounts,
             platform_accounts::list_kiro_accounts,
             platform_accounts::codex_oauth_login_start,
+            platform_accounts::codex_oauth_login_status,
             platform_accounts::gemini_oauth_login_start,
+            platform_accounts::gemini_oauth_login_status,
             platform_accounts::kiro_oauth_login_start,
+            platform_accounts::kiro_oauth_login_status,
             platform_accounts::codex_oauth_login_completed,
             platform_accounts::gemini_oauth_login_complete,
             platform_accounts::kiro_oauth_login_complete,
@@ -27691,6 +27853,41 @@ mod tests {
         assert_eq!(
             platform_auto_refresh_minutes(&settings, PlatformAutoRefreshKind::Kiro),
             11
+        );
+    }
+
+    #[test]
+    fn workspace_open_args_append_workspace_path_when_placeholder_is_absent() {
+        let args = vec!["--reuse-window".to_string()];
+
+        let resolved = resolve_workspace_open_args(&args, "/tmp/demo-project");
+
+        assert_eq!(
+            resolved,
+            vec![
+                "--reuse-window".to_string(),
+                "/tmp/demo-project".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn workspace_open_args_replace_placeholder_without_appending_duplicate_path() {
+        let args = vec![
+            "--working-directory".to_string(),
+            "{path}".to_string(),
+            "--single-instance".to_string(),
+        ];
+
+        let resolved = resolve_workspace_open_args(&args, "/tmp/demo-project");
+
+        assert_eq!(
+            resolved,
+            vec![
+                "--working-directory".to_string(),
+                "/tmp/demo-project".to_string(),
+                "--single-instance".to_string(),
+            ]
         );
     }
 }

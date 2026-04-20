@@ -153,6 +153,16 @@ pub(crate) struct OAuthStartResponse {
     interval_seconds: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct OAuthStatusResponse {
+    login_id: String,
+    status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    callback_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expires_at: Option<i64>,
+}
+
 #[derive(Debug, Clone)]
 struct CodexQuotaSnapshot {
     hourly_percentage: i32,
@@ -384,9 +394,17 @@ fn build_provider_auth_url(
     code_verifier: &str,
 ) -> Result<String, String> {
     match platform {
-        Platform::Codex => Ok(build_codex_auth_url(redirect_uri, state_token, code_verifier)),
+        Platform::Codex => Ok(build_codex_auth_url(
+            redirect_uri,
+            state_token,
+            code_verifier,
+        )),
         Platform::Gemini => build_gemini_auth_url(redirect_uri, state_token),
-        Platform::Kiro => Ok(build_kiro_auth_url(redirect_uri, state_token, code_verifier)),
+        Platform::Kiro => Ok(build_kiro_auth_url(
+            redirect_uri,
+            state_token,
+            code_verifier,
+        )),
     }
 }
 
@@ -3539,6 +3557,49 @@ fn cancel_oauth(platform: Platform, login_id: Option<String>) -> Result<(), Stri
     Ok(())
 }
 
+fn oauth_status(platform: Platform, login_id: &str) -> Result<OAuthStatusResponse, String> {
+    let pending = load_oauth_pending(platform)?;
+    let now = Utc::now().timestamp();
+
+    let response = match pending {
+        Some(state) if state.login_id == login_id => {
+            let callback_url = state
+                .callback_received_url
+                .as_ref()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+            let status = if callback_url.is_some() {
+                "ready"
+            } else if state.expires_at.is_some_and(|timestamp| timestamp <= now) {
+                "expired"
+            } else {
+                "waiting"
+            };
+
+            OAuthStatusResponse {
+                login_id: login_id.to_string(),
+                status: status.to_string(),
+                callback_url,
+                expires_at: state.expires_at,
+            }
+        }
+        Some(_) => OAuthStatusResponse {
+            login_id: login_id.to_string(),
+            status: "replaced".to_string(),
+            callback_url: None,
+            expires_at: None,
+        },
+        None => OAuthStatusResponse {
+            login_id: login_id.to_string(),
+            status: "cancelled".to_string(),
+            callback_url: None,
+            expires_at: None,
+        },
+    };
+
+    Ok(response)
+}
+
 fn read_json_file(path: &Path) -> Result<Value, String> {
     let raw =
         fs::read_to_string(path).map_err(|err| format!("读取 {} 失败: {}", path.display(), err))?;
@@ -3684,13 +3745,28 @@ pub fn codex_oauth_login_start() -> Result<OAuthStartResponse, String> {
 }
 
 #[tauri::command]
+pub fn codex_oauth_login_status(login_id: String) -> Result<OAuthStatusResponse, String> {
+    oauth_status(Platform::Codex, &login_id)
+}
+
+#[tauri::command]
 pub fn gemini_oauth_login_start() -> Result<OAuthStartResponse, String> {
     start_oauth(Platform::Gemini)
 }
 
 #[tauri::command]
+pub fn gemini_oauth_login_status(login_id: String) -> Result<OAuthStatusResponse, String> {
+    oauth_status(Platform::Gemini, &login_id)
+}
+
+#[tauri::command]
 pub fn kiro_oauth_login_start() -> Result<OAuthStartResponse, String> {
     start_oauth(Platform::Kiro)
+}
+
+#[tauri::command]
+pub fn kiro_oauth_login_status(login_id: String) -> Result<OAuthStatusResponse, String> {
+    oauth_status(Platform::Kiro, &login_id)
 }
 
 #[tauri::command]

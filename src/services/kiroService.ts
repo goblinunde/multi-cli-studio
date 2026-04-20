@@ -11,6 +11,13 @@ export interface KiroOAuthLoginStartResponse {
   callbackUrl?: string | null;
 }
 
+export interface KiroOAuthLoginStatusResponse {
+  loginId: string;
+  status: "waiting" | "ready" | "expired" | "cancelled" | "replaced";
+  callbackUrl?: string | null;
+  expiresAt?: number | null;
+}
+
 export async function listKiroAccounts(): Promise<KiroAccount[]> {
   return await invoke("list_kiro_accounts");
 }
@@ -47,6 +54,12 @@ export async function startKiroOAuthLogin(): Promise<KiroOAuthLoginStartResponse
   return await invoke("kiro_oauth_login_start");
 }
 
+export async function getKiroOAuthLoginStatus(
+  loginId: string
+): Promise<KiroOAuthLoginStatusResponse> {
+  return await invoke("kiro_oauth_login_status", { loginId });
+}
+
 export async function completeKiroOAuthLogin(loginId: string): Promise<KiroAccount> {
   return await invoke("kiro_oauth_login_complete", { loginId });
 }
@@ -79,4 +92,3 @@ export async function updateKiroAccountTags(
 export async function injectKiroToVSCode(accountId: string): Promise<string> {
   return await invoke("switch_kiro_account", { accountId });
 }
-
