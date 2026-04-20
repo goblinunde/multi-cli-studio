@@ -1,6 +1,6 @@
 Name:           multi-cli-studio
-Version:        1.0.0
-Release:        2%{?dist}
+Version:        1.0.1
+Release:        1%{?dist}
 Summary:        Desktop orchestration shell for multiple AI coding CLIs
 
 License:        MIT
@@ -25,6 +25,7 @@ BuildRequires:  desktop-file-utils
 %global cargo_home %{_builddir}/cargo-home
 %global npm_cache %{_builddir}/npm-cache
 %global build_home %{_builddir}/home
+%global debug_package %{nil}
 
 %description
 Multi CLI Studio is a Tauri desktop workspace for orchestrating Codex, Claude,
@@ -78,6 +79,10 @@ desktop-file-validate "%{buildroot}%{_datadir}/applications/%{name}.desktop"
 %{_datadir}/icons/hicolor/512x512/apps/%{name}.png
 
 %changelog
+* Mon Apr 20 2026 Codex <codex@example.com> - 1.0.1-1
+- Avoid eager startup workspace indexing that can freeze large-directory launches
+- Disable debuginfo and debugsource RPM subpackages for Fedora builds
+
 * Sun Apr 19 2026 Codex <codex@example.com> - 0.1.0-2
 - Build the Linux binary with Tauri custom-protocol enabled for packaged runtime assets
 

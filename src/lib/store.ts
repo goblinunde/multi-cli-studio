@@ -62,7 +62,6 @@ import {
 } from "./messageFormatting";
 import { notifyTerminalCompletion, type TerminalCompletionNotice } from "./desktopNotifications";
 import {
-  loadWorkspaceFileIndex,
   searchWorkspaceFileIndex,
 } from "./workspaceFileIndex";
 
@@ -3374,17 +3373,7 @@ export const useStore = create<StoreState>((set, get) => {
       if (cached.length > 0) {
         return cached;
       }
-      const index = await loadWorkspaceFileIndex({
-        workspaceId: workspace.id,
-        projectRoot: workspace.rootPath,
-      });
-      const normalized = query.trim().toLowerCase();
-      return index.files
-        .filter((item) => {
-          const relativePath = item.relativePath.toLowerCase();
-          return relativePath.includes(normalized) || item.name.toLowerCase().includes(normalized);
-        })
-        .slice(0, 40);
+      return await bridge.searchWorkspaceFiles(workspace.rootPath, query, workspace.id);
     } catch {
       return [];
     }
