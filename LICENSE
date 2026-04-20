@@ -1,3 +1,38 @@
+Multi CLI Studio License
+========================
+
+Default repository license
+--------------------------
+
+Unless a file or section states otherwise, this repository is distributed under
+the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+license ("CC BY-NC-SA 4.0").
+
+License URL:
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Human-readable summary:
+https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en
+
+Default policy for this repository:
+
+- Allowed: personal learning, research, and other non-commercial use,
+  redistribution, and modification, provided attribution is preserved and
+  derivative distributions remain under the same license terms.
+- Not allowed without separate written permission: commercial use, including
+  internal commercial operations, external paid services, paid product
+  integration, or resale / redistribution for profit.
+- Commercial licensing: contact the current project maintainer for a separate
+  written commercial license and pricing.
+
+Upstream notice retained for inherited portions
+-----------------------------------------------
+
+This repository is maintained as a derivative work of
+Austin-Patrician/multi-cli-studio. Portions derived from that upstream project
+remain subject to the upstream MIT notice below, which must be preserved in
+copies or substantial portions of those inherited materials.
+
 MIT License
 
 Copyright (c) 2026 Austin-Patrician

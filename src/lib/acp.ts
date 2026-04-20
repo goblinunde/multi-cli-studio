@@ -85,7 +85,7 @@ export const ACP_COMMANDS: AcpCommandDef[] = [
   {
     kind: "plan", slash: "/plan", label: "Plan Mode",
     description: "Toggle planning mode \u2014 CLI works in plan-only mode",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "model", slash: "/model", label: "Select Model",
@@ -96,48 +96,48 @@ export const ACP_COMMANDS: AcpCommandDef[] = [
   {
     kind: "compact", slash: "/compact", label: "Compact Context",
     description: "Trim older conversation turns to free context space",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "clear", slash: "/clear", label: "Clear History",
     description: "Clear conversation history for all CLIs",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "rewind", slash: "/rewind", label: "Rewind",
     description: "Remove the last conversation turn and its output",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "diff", slash: "/diff", label: "Git Diff",
     description: "Show uncommitted changes in the project",
-    execution: "git-local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "git-local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "permissions", slash: "/permissions", label: "Permissions",
     description: "Change sandbox/permission mode for the active CLI",
     argsHint: "<mode>",
-    execution: "flag-inject", supportedClis: ["codex", "claude", "gemini"],
+    execution: "flag-inject", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "cost", slash: "/cost", label: "Usage/Cost",
     description: "Show estimated token usage across the conversation",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "help", slash: "/help", label: "Help",
     description: "Show available commands for the active CLI",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "export", slash: "/export", label: "Export",
     description: "Export conversation history as markdown",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "status", slash: "/status", label: "Status",
     description: "Show CLI version, model, and connection info",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "effort", slash: "/effort", label: "Effort Level",
@@ -153,18 +153,18 @@ export const ACP_COMMANDS: AcpCommandDef[] = [
   {
     kind: "context", slash: "/context", label: "Context Usage",
     description: "Show how much context window is used per CLI",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "memory", slash: "/memory", label: "Memory",
     description: "View/edit project memory (CLAUDE.md / AGENTS.md)",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
   {
     kind: "recall", slash: "/recall", label: "Recall",
     description: "Search conversation history across all CLIs in this tab",
     argsHint: "<search-query>",
-    execution: "local", supportedClis: ["codex", "claude", "gemini"],
+    execution: "local", supportedClis: ["codex", "claude", "gemini", "kiro"],
   },
 ];
 

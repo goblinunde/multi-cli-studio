@@ -99,7 +99,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Toggle planning mode".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "model".into(),
@@ -117,7 +122,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Trim older conversation turns to free context space".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "clear".into(),
@@ -126,7 +136,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Clear conversation history for all CLIs".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "rewind".into(),
@@ -135,7 +150,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Remove the last conversation turn".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "diff".into(),
@@ -144,7 +164,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Show uncommitted changes in the project".into(),
             args_hint: None,
             execution: "git-local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "permissions".into(),
@@ -153,7 +178,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Change sandbox/permission mode".into(),
             args_hint: Some("<mode>".into()),
             execution: "flag-inject".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "cost".into(),
@@ -162,7 +192,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Show estimated token usage".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "help".into(),
@@ -171,7 +206,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Show available commands".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "export".into(),
@@ -180,7 +220,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Export conversation history as markdown".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "status".into(),
@@ -189,7 +234,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Show CLI version, model, and connection info".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "effort".into(),
@@ -216,7 +266,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "Show context window usage per CLI".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
         AcpCommandDef {
             kind: "memory".into(),
@@ -225,7 +280,12 @@ pub fn command_registry() -> Vec<AcpCommandDef> {
             description: "View/edit project memory files".into(),
             args_hint: None,
             execution: "local".into(),
-            supported_clis: vec!["codex".into(), "claude".into(), "gemini".into()],
+            supported_clis: vec![
+                "codex".into(),
+                "claude".into(),
+                "gemini".into(),
+                "kiro".into(),
+            ],
         },
     ]
 }

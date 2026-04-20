@@ -7,6 +7,7 @@ Multi CLI Studio is a Tauri desktop workspace for people who do not want to be l
 Instead of forcing one tool to do everything, it gives you one local desktop surface for:
 
 - `Codex`, `Claude`, and `Gemini` CLI workflows
+- unified platform account management for `API Providers`, `Codex`, `Gemini`, and `Kiro`
 - provider-based model chat for `OpenAI-compatible`, `Claude`, and `Gemini`
 - local automation jobs and workflows
 - shared local state across terminal, chat, and automation
@@ -86,6 +87,13 @@ Multi CLI Studio is built around a different assumption:
 - local provider management with editable API key, base URL, enable state, and model catalog
 - useful for side-by-side comparison, quick iteration, and non-CLI model usage
 
+### Platform Center and Account Management
+
+- unified platform center for `API Providers`, `Codex`, `Gemini`, and `Kiro`
+- OAuth, manual import, local account import, account export, and current-account switching
+- Codex provider quick-switch, Gemini account injection, and Kiro credits/account views
+- desktop-side global proxy and per-platform quota auto-refresh settings
+
 ### Automation and Workflow Layer
 
 - automation jobs with execution summaries, state, and logs
@@ -115,10 +123,10 @@ Multi CLI Studio is built around a different assumption:
 - dedicated provider-based conversation page
 - keeps one thread while letting users switch model/provider selection turn by turn
 
-### Model Providers
+### Platform Center
 
-- manage OpenAI-compatible, Claude, and Gemini providers
-- edit base URL, API key, enabled state, and refresh model lists
+- overview hub for API providers plus `Codex`, `Gemini`, and `Kiro` account centers
+- manage provider credentials, platform accounts, local instances, and refresh behavior
 
 ### Automation
 
@@ -126,7 +134,7 @@ Multi CLI Studio is built around a different assumption:
 
 ### Settings
 
-- inspect installed CLIs, local runtime resources, and environment-related state
+- inspect installed CLIs, local runtime resources, proxy / refresh settings, and environment-related state
 
 ## Tech Stack
 
@@ -277,6 +285,18 @@ https://generativelanguage.googleapis.com/v1beta
 
 Do not put `models/...:streamGenerateContent` or `?key=...` into the base URL field.
 
+### Gemini OAuth Setup
+
+The desktop Gemini OAuth flow no longer ships client credentials in the repository.
+Set these environment variables before launching the app:
+
+```bash
+export MULTI_CLI_STUDIO_GEMINI_OAUTH_CLIENT_ID="your-google-oauth-client-id"
+export MULTI_CLI_STUDIO_GEMINI_OAUTH_CLIENT_SECRET="your-google-oauth-client-secret"
+```
+
+If you do not want to manage OAuth client credentials, use local account import from `~/.gemini/oauth_creds.json` or one of the API-key based Gemini modes instead.
+
 ## Data Storage
 
 Application data is stored in local app-data directories:
@@ -308,13 +328,33 @@ The current distribution flow is intentionally low-cost:
 - In-app updates currently target the macOS and Windows release artifacts; Fedora RPMs are published as manual download assets.
 - In-app updates still require a real Tauri updater keypair: put the public key in `src-tauri/tauri.conf.json` and configure the private key in GitHub Actions secrets.
 
+This fork also keeps the checked-in updater feed aligned with the current GitHub repository, and the release setup/check scripts now recognize GitHub SSH aliases such as `git@github_alias:owner/repo.git`.
+
 Full setup and release steps:
 
 - [docs/desktop-release.md](./docs/desktop-release.md)
 
+## Project Provenance
+
+- This repository continues from [Austin-Patrician/multi-cli-studio](https://github.com/Austin-Patrician/multi-cli-studio), which was originally published under MIT.
+- Platform account-management direction, release-facing presentation choices, and licensing language were also informed by [jlcodes99/cockpit-tools](https://github.com/jlcodes99/cockpit-tools).
+
+## Acknowledgments
+
+- Thanks to Austin-Patrician for publishing the original `multi-cli-studio` codebase.
+- Thanks to jlcodes99 for openly sharing `cockpit-tools` and the surrounding product ideas.
+- Thanks to everyone on LinuxDo for the discussion, feedback, and testing support.
+
 ## License
 
-MIT. See [LICENSE](./LICENSE).
+This repository defaults to [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+- Allowed: personal learning, research, and non-commercial use or modification, with attribution and share-alike obligations.
+- Not allowed: commercial use without separate written authorization, including internal business use, paid services, paid integrations, or resale.
+- Commercial license: contact the current maintainer for separate written authorization and pricing.
+- The upstream MIT notice for inherited portions from `Austin-Patrician/multi-cli-studio` is preserved in [LICENSE](./LICENSE).
+
+Additional provenance and attribution details are in [NOTICE.md](./NOTICE.md).
 
 ---
 

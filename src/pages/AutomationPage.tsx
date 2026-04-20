@@ -171,6 +171,8 @@ function executionModeLabel(value?: string | null) {
       return "Claude";
     case "gemini":
       return "Gemini";
+    case "kiro":
+      return "Kiro";
     default:
       return "自动模式";
   }

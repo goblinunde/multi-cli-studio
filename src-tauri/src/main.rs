@@ -3,6 +3,7 @@
 mod acp;
 mod automation;
 mod local_usage;
+mod platform_accounts;
 mod storage;
 
 use std::{
@@ -15,7 +16,7 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc, Arc, Mutex, OnceLock,
     },
     thread,
     time::{Duration, Instant},
@@ -78,7 +79,19 @@ const DEFAULT_MAX_TURNS: usize = 50;
 const DEFAULT_MAX_OUTPUT_CHARS: usize = 100_000;
 const DEFAULT_TIMEOUT_MS: u64 = 300_000;
 const RUNTIME_DETECTION_TIMEOUT_MS: u64 = 1_500;
+const PLATFORM_AUTO_REFRESH_POLL_MS: u64 = 30_000;
 const SSH_ASKPASS_PASSWORD_ENV: &str = "MULTI_CLI_STUDIO_SSH_PASSWORD";
+const MANAGED_PROXY_SET_KEYS: [&str; 6] = [
+    "http_proxy",
+    "https_proxy",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "all_proxy",
+    "ALL_PROXY",
+];
+const MANAGED_PROXY_NO_PROXY_KEYS: [&str; 2] = ["no_proxy", "NO_PROXY"];
+
+static INHERITED_PROXY_ENV: OnceLock<Vec<(&'static str, Option<String>)>> = OnceLock::new();
 
 #[cfg(target_os = "windows")]
 const SSH_ASKPASS_HELPER_NAME: &str = "multi-cli-studio-ssh-askpass.cmd";
@@ -406,6 +419,20 @@ struct AppSettings {
     notification_config: NotificationConfig,
     #[serde(default)]
     update_config: UpdateConfig,
+    #[serde(default = "default_platform_account_view_modes")]
+    platform_account_view_modes: PlatformAccountViewModes,
+    #[serde(default)]
+    global_proxy_enabled: bool,
+    #[serde(default)]
+    global_proxy_url: String,
+    #[serde(default)]
+    global_proxy_no_proxy: String,
+    #[serde(default = "default_codex_auto_refresh_minutes")]
+    codex_auto_refresh_minutes: i32,
+    #[serde(default = "default_gemini_auto_refresh_minutes")]
+    gemini_auto_refresh_minutes: i32,
+    #[serde(default = "default_kiro_auto_refresh_minutes")]
+    kiro_auto_refresh_minutes: i32,
     #[serde(default)]
     openai_compatible_providers: Vec<ModelProviderConfig>,
     #[serde(default)]
@@ -416,10 +443,54 @@ struct AppSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CliPaths {
+struct PlatformAccountViewModes {
+    #[serde(default = "default_platform_account_view_mode")]
     codex: String,
-    claude: String,
+    #[serde(default = "default_platform_account_view_mode")]
     gemini: String,
+    #[serde(default = "default_platform_account_view_mode")]
+    kiro: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CliPaths {
+    #[serde(default = "default_auto_cli_path")]
+    codex: String,
+    #[serde(default = "default_auto_cli_path")]
+    claude: String,
+    #[serde(default = "default_auto_cli_path")]
+    gemini: String,
+    #[serde(default = "default_auto_cli_path")]
+    kiro: String,
+}
+
+fn default_auto_cli_path() -> String {
+    "auto".to_string()
+}
+
+fn default_platform_account_view_mode() -> String {
+    "grid".to_string()
+}
+
+fn default_platform_account_view_modes() -> PlatformAccountViewModes {
+    PlatformAccountViewModes {
+        codex: default_platform_account_view_mode(),
+        gemini: default_platform_account_view_mode(),
+        kiro: default_platform_account_view_mode(),
+    }
+}
+
+fn default_codex_auto_refresh_minutes() -> i32 {
+    10
+}
+
+fn default_gemini_auto_refresh_minutes() -> i32 {
+    10
+}
+
+fn default_kiro_auto_refresh_minutes() -> i32 {
+    10
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -467,6 +538,7 @@ struct CliPathsDetection {
     codex: Option<String>,
     claude: Option<String>,
     gemini: Option<String>,
+    kiro: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -756,6 +828,13 @@ fn validate_notification_config(config: &NotificationConfig) -> Result<(), Strin
     Ok(())
 }
 
+fn validate_global_proxy_settings(settings: &AppSettings) -> Result<(), String> {
+    if settings.global_proxy_enabled && settings.global_proxy_url.trim().is_empty() {
+        return Err("启用全局代理时，代理地址不能为空。".to_string());
+    }
+    Ok(())
+}
+
 fn now_rfc3339() -> String {
     Local::now().to_rfc3339()
 }
@@ -902,6 +981,13 @@ fn normalize_ssh_connections(settings: &mut AppSettings) {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(|value| value.to_string());
+        connection.detected_cli_paths.kiro = connection
+            .detected_cli_paths
+            .kiro
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string());
         normalized.push(connection);
     }
     settings.ssh_connections = normalized;
@@ -940,6 +1026,29 @@ fn normalize_custom_agents(settings: &mut AppSettings) {
 
 fn normalize_settings_providers(settings: &mut AppSettings) {
     settings.model_chat_context_turn_limit = settings.model_chat_context_turn_limit.max(1);
+    for mode in [
+        &mut settings.platform_account_view_modes.codex,
+        &mut settings.platform_account_view_modes.gemini,
+        &mut settings.platform_account_view_modes.kiro,
+    ] {
+        let normalized = mode.trim().to_ascii_lowercase();
+        *mode = if normalized == "list" {
+            "list".to_string()
+        } else {
+            "grid".to_string()
+        };
+    }
+    settings.global_proxy_url = settings.global_proxy_url.trim().to_string();
+    settings.global_proxy_no_proxy = settings.global_proxy_no_proxy.trim().to_string();
+    if settings.codex_auto_refresh_minutes < 0 {
+        settings.codex_auto_refresh_minutes = default_codex_auto_refresh_minutes();
+    }
+    if settings.gemini_auto_refresh_minutes < 0 {
+        settings.gemini_auto_refresh_minutes = default_gemini_auto_refresh_minutes();
+    }
+    if settings.kiro_auto_refresh_minutes < 0 {
+        settings.kiro_auto_refresh_minutes = default_kiro_auto_refresh_minutes();
+    }
     normalize_ssh_connections(settings);
     normalize_custom_agents(settings);
     normalize_provider_entries(
@@ -948,6 +1057,169 @@ fn normalize_settings_providers(settings: &mut AppSettings) {
     );
     normalize_provider_entries(&mut settings.claude_providers, "claude");
     normalize_provider_entries(&mut settings.gemini_providers, "gemini");
+}
+
+fn inherited_proxy_env() -> &'static Vec<(&'static str, Option<String>)> {
+    INHERITED_PROXY_ENV.get_or_init(|| {
+        MANAGED_PROXY_SET_KEYS
+            .iter()
+            .chain(MANAGED_PROXY_NO_PROXY_KEYS.iter())
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect()
+    })
+}
+
+fn managed_proxy_env_pairs(settings: &AppSettings) -> Vec<(&'static str, String)> {
+    if !settings.global_proxy_enabled {
+        return Vec::new();
+    }
+
+    let proxy_url = settings.global_proxy_url.trim();
+    if proxy_url.is_empty() {
+        return Vec::new();
+    }
+
+    let mut pairs = Vec::with_capacity(8);
+    for key in MANAGED_PROXY_SET_KEYS {
+        pairs.push((key, proxy_url.to_string()));
+    }
+
+    let no_proxy = settings.global_proxy_no_proxy.trim();
+    if !no_proxy.is_empty() {
+        for key in MANAGED_PROXY_NO_PROXY_KEYS {
+            pairs.push((key, no_proxy.to_string()));
+        }
+    }
+
+    pairs
+}
+
+fn clear_managed_proxy_env() {
+    for key in MANAGED_PROXY_SET_KEYS {
+        std::env::remove_var(key);
+    }
+    for key in MANAGED_PROXY_NO_PROXY_KEYS {
+        std::env::remove_var(key);
+    }
+}
+
+fn restore_inherited_proxy_env() {
+    clear_managed_proxy_env();
+    for (key, value) in inherited_proxy_env() {
+        if let Some(value) = value {
+            std::env::set_var(key, value);
+        }
+    }
+}
+
+fn sync_global_proxy_env(settings: &AppSettings) {
+    let pairs = managed_proxy_env_pairs(settings);
+    if pairs.is_empty() {
+        restore_inherited_proxy_env();
+        return;
+    }
+
+    clear_managed_proxy_env();
+    for (key, value) in pairs {
+        std::env::set_var(key, value);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PlatformAutoRefreshKind {
+    Codex,
+    Gemini,
+    Kiro,
+}
+
+fn platform_auto_refresh_minutes(
+    settings: &AppSettings,
+    platform: PlatformAutoRefreshKind,
+) -> i32 {
+    match platform {
+        PlatformAutoRefreshKind::Codex => settings.codex_auto_refresh_minutes,
+        PlatformAutoRefreshKind::Gemini => settings.gemini_auto_refresh_minutes,
+        PlatformAutoRefreshKind::Kiro => settings.kiro_auto_refresh_minutes,
+    }
+}
+
+fn auto_refresh_interval_ms(minutes: i32) -> Option<u64> {
+    if minutes <= 0 {
+        return None;
+    }
+    Some(minutes as u64 * 60 * 1000)
+}
+
+fn auto_refresh_is_due(minutes: i32, now_ms: u64, last_run_at_ms: Option<u64>) -> bool {
+    let Some(interval_ms) = auto_refresh_interval_ms(minutes) else {
+        return false;
+    };
+    match last_run_at_ms {
+        Some(last_run_at_ms) => now_ms.saturating_sub(last_run_at_ms) >= interval_ms,
+        None => true,
+    }
+}
+
+async fn run_platform_auto_refresh(platform: PlatformAutoRefreshKind) {
+    match platform {
+        PlatformAutoRefreshKind::Codex => {
+            let _ = platform_accounts::refresh_all_codex_quotas().await;
+        }
+        PlatformAutoRefreshKind::Gemini => {
+            let _ = platform_accounts::refresh_all_gemini_tokens().await;
+        }
+        PlatformAutoRefreshKind::Kiro => {
+            let _ = platform_accounts::refresh_all_kiro_tokens().await;
+        }
+    }
+}
+
+fn spawn_platform_auto_refresh_worker(settings: Arc<Mutex<AppSettings>>) {
+    thread::spawn(move || {
+        let mut last_run_at_ms = HashMap::<PlatformAutoRefreshKind, u64>::new();
+        let codex_running = Arc::new(AtomicBool::new(false));
+        let gemini_running = Arc::new(AtomicBool::new(false));
+        let kiro_running = Arc::new(AtomicBool::new(false));
+
+        loop {
+            let snapshot = match settings.lock() {
+                Ok(settings) => settings.clone(),
+                Err(_) => {
+                    thread::sleep(Duration::from_millis(PLATFORM_AUTO_REFRESH_POLL_MS));
+                    continue;
+                }
+            };
+            let now_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
+
+            for platform in [
+                PlatformAutoRefreshKind::Codex,
+                PlatformAutoRefreshKind::Gemini,
+                PlatformAutoRefreshKind::Kiro,
+            ] {
+                let minutes = platform_auto_refresh_minutes(&snapshot, platform);
+                if !auto_refresh_is_due(minutes, now_ms, last_run_at_ms.get(&platform).copied()) {
+                    continue;
+                }
+
+                let running = match platform {
+                    PlatformAutoRefreshKind::Codex => codex_running.clone(),
+                    PlatformAutoRefreshKind::Gemini => gemini_running.clone(),
+                    PlatformAutoRefreshKind::Kiro => kiro_running.clone(),
+                };
+                if running.swap(true, Ordering::SeqCst) {
+                    continue;
+                }
+
+                last_run_at_ms.insert(platform, now_ms);
+                tauri::async_runtime::spawn(async move {
+                    run_platform_auto_refresh(platform).await;
+                    running.store(false, Ordering::SeqCst);
+                });
+            }
+
+            thread::sleep(Duration::from_millis(PLATFORM_AUTO_REFRESH_POLL_MS));
+        }
+    });
 }
 
 fn url_has_path_segment(base_url: &str, segment: &str) -> bool {
@@ -1218,7 +1490,12 @@ fn api_attachment_image_payload(
         .filter(|value| value.starts_with("image/"))
         .or_else(|| guess_api_image_media_type(&attachment.file_name).map(str::to_string))
         .or_else(|| guess_api_image_media_type(source).map(str::to_string))
-        .ok_or_else(|| format!("Could not determine media type for `{}`.", attachment.file_name))?;
+        .ok_or_else(|| {
+            format!(
+                "Could not determine media type for `{}`.",
+                attachment.file_name
+            )
+        })?;
     let base64_data = encode_base64(&bytes);
     let data_url = format!("data:{};base64,{}", media_type, base64_data);
     Ok((media_type, base64_data, data_url))
@@ -3337,6 +3614,7 @@ fn default_transport_kind(cli_id: &str) -> String {
     match cli_id {
         "codex" => "codex-app-server",
         "claude" => "claude-cli",
+        "kiro" => "kiro-cli",
         "gemini" => "gemini-acp",
         _ => "browser-fallback",
     }
@@ -3399,6 +3677,7 @@ fn automation_permission_mode_for_cli(
     if !write_mode {
         return match cli_id {
             "claude" | "gemini" => "plan".to_string(),
+            "kiro" => "read,grep".to_string(),
             _ => "read-only".to_string(),
         };
     }
@@ -3416,6 +3695,8 @@ fn automation_permission_mode_for_cli(
         ("gemini", "full-access") => "yolo".to_string(),
         ("gemini", "read-only") => "plan".to_string(),
         ("gemini", _) => "auto_edit".to_string(),
+        ("kiro", "read-only") => "read,grep".to_string(),
+        ("kiro", _) => "trust-all-tools".to_string(),
         (_, _) => "workspace-write".to_string(),
     }
 }
@@ -3440,6 +3721,22 @@ fn codex_sandbox_mode(permission_mode: &str) -> String {
         _ => "workspace-write",
     }
     .to_string()
+}
+
+fn kiro_trust_args(permission_mode: &str, write_mode: bool, plan_mode: bool) -> Vec<String> {
+    let mode = if plan_mode || !write_mode {
+        "read,grep".to_string()
+    } else if permission_mode.trim().is_empty() {
+        "trust-all-tools".to_string()
+    } else {
+        permission_mode.trim().to_string()
+    };
+
+    if mode == "trust-all-tools" {
+        vec!["--trust-all-tools".to_string()]
+    } else {
+        vec![format!("--trust-tools={}", mode)]
+    }
 }
 
 fn codex_sandbox_policy(permission_mode: &str, project_root: &str) -> Value {
@@ -8795,6 +9092,7 @@ fn update_settings(
 ) -> Result<AppSettings, String> {
     validate_notification_config(&settings.notification_config)?;
     normalize_settings_providers(&mut settings);
+    validate_global_proxy_settings(&settings)?;
     {
         let mut s = store.settings.lock().map_err(|err| err.to_string())?;
         *s = settings.clone();
@@ -8806,6 +9104,7 @@ fn update_settings(
         persist_context(&ctx)?;
     }
     persist_settings(&settings)?;
+    sync_global_proxy_env(&settings);
     Ok(settings)
 }
 
@@ -8852,7 +9151,8 @@ printf '\nshell='; command -v \"$SHELL\" 2>/dev/null || printf \"$SHELL\"; \
 printf '\npython='; command -v python3 2>/dev/null || true; \
 printf '\ncodex='; resolve_remote_command codex 2>/dev/null || true; \
 printf '\nclaude='; resolve_remote_command claude 2>/dev/null || true; \
-printf '\ngemini='; resolve_remote_command gemini 2>/dev/null || true",
+printf '\ngemini='; resolve_remote_command gemini 2>/dev/null || true; \
+printf '\nkiro='; resolve_remote_command kiro-cli 2>/dev/null || true",
     )?;
 
     let mut result = SshConnectionTestResult {
@@ -8903,6 +9203,11 @@ printf '\ngemini='; resolve_remote_command gemini 2>/dev/null || true",
             let trimmed = value.trim();
             if !trimmed.is_empty() {
                 result.detected_cli_paths.gemini = Some(trimmed.to_string());
+            }
+        } else if let Some(value) = line.strip_prefix("kiro=") {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                result.detected_cli_paths.kiro = Some(trimmed.to_string());
             }
         }
     }
@@ -9202,6 +9507,7 @@ fn transport_kind_for_cli(cli_id: &str) -> String {
     match cli_id {
         "claude" => "claude-cli".to_string(),
         "gemini" => "gemini-acp".to_string(),
+        "kiro" => "kiro-cli".to_string(),
         "codex" => "codex-app-server".to_string(),
         _ => "browser-fallback".to_string(),
     }
@@ -12784,6 +13090,7 @@ fn execute_acp_command(
                             "codex" => "workspace-write",
                             "claude" => "acceptEdits",
                             "gemini" => "auto_edit",
+                            "kiro" => "trust-all-tools",
                             _ => "default",
                         }
                         .to_string()
@@ -13146,6 +13453,10 @@ fn probe_acp_capabilities(cli_id: &str) -> acp::AcpCliCapabilities {
             .as_deref()
             .map(|help| extract_flag_choices(help, "--approval-mode"))
             .unwrap_or_default(),
+        "kiro" => help_output
+            .as_deref()
+            .map(|help| extract_flag_choices(help, "--trust-tools"))
+            .unwrap_or_default(),
         _ => Vec::new(),
     };
 
@@ -13174,7 +13485,7 @@ fn probe_acp_capabilities(cli_id: &str) -> acp::AcpCliCapabilities {
     acp::AcpCliCapabilities {
         cli_id: cli_id.to_string(),
         model: acp::AcpOptionCatalog {
-            supported: true,
+            supported: cli_id != "kiro",
             options: if model_uses_settings {
                 claude_settings_model_options
             } else {
@@ -13214,6 +13525,11 @@ fn probe_acp_capabilities(cli_id: &str) -> acp::AcpCliCapabilities {
                     "Detected from local Gemini CLI help.".to_string()
                 } else {
                     "Could not interrogate Gemini locally, so approval modes fell back to known values.".to_string()
+                }),
+                "kiro" => Some(if permission_uses_runtime {
+                    "Detected from local Kiro CLI help.".to_string()
+                } else {
+                    "Could not interrogate Kiro locally, so trust modes fell back to known values.".to_string()
                 }),
                 _ => None,
             },
@@ -13370,6 +13686,7 @@ fn fallback_model_options(cli_id: &str) -> Vec<acp::AcpOptionDef> {
                 "Lightweight Gemini 2.5 Flash Lite model",
             ),
         ],
+        "kiro" => Vec::new(),
         _ => vec![model_preset("default", "Use the CLI default model")],
     }
 }
@@ -13414,6 +13731,18 @@ fn fallback_permission_options(cli_id: &str) -> Vec<acp::AcpOptionDef> {
             acp_option("auto_edit", Some("Auto-approve edit tools"), "fallback"),
             acp_option("yolo", Some("Auto-approve all tools"), "fallback"),
             acp_option("plan", Some("Read-only plan mode"), "fallback"),
+        ],
+        "kiro" => vec![
+            acp_option(
+                "read,grep",
+                Some("Allow read-only tools in headless mode"),
+                "fallback",
+            ),
+            acp_option(
+                "trust-all-tools",
+                Some("Trust all tools for headless execution"),
+                "fallback",
+            ),
         ],
         _ => Vec::new(),
     }
@@ -16733,7 +17062,7 @@ fn detect_engines(store: State<'_, AppStore>) -> Result<Vec<SettingsEngineStatus
     Ok(state
         .agents
         .iter()
-        .filter(|agent| matches!(agent.id.as_str(), "codex" | "claude" | "gemini"))
+        .filter(|agent| matches!(agent.id.as_str(), "codex" | "claude" | "gemini" | "kiro"))
         .map(|agent| SettingsEngineStatus {
             engine_type: agent.id.clone(),
             installed: agent.runtime.installed,
@@ -18613,6 +18942,21 @@ fn build_agent_script(
             }
             shell_command(wrapper_path, &args)
         }
+        "kiro" => {
+            let permission_mode = session
+                .permission_mode
+                .get("kiro")
+                .cloned()
+                .unwrap_or_else(|| "trust-all-tools".to_string());
+            let mut args = vec!["chat".to_string(), "--no-interactive".to_string()];
+            args.extend(kiro_trust_args(
+                &permission_mode,
+                write_mode,
+                session.plan_mode,
+            ));
+            args.push(prompt.to_string());
+            shell_command(wrapper_path, &args)
+        }
         _ => return Err("Unknown agent".to_string()),
     };
 
@@ -18704,6 +19048,21 @@ fn build_agent_args(
                 args.push("-m".to_string());
                 args.push(model.clone());
             }
+            args
+        }
+        "kiro" => {
+            let permission_mode = session
+                .permission_mode
+                .get("kiro")
+                .cloned()
+                .unwrap_or_else(|| "trust-all-tools".to_string());
+            let mut args = vec!["chat".to_string(), "--no-interactive".to_string()];
+            args.extend(kiro_trust_args(
+                &permission_mode,
+                write_mode,
+                session.plan_mode,
+            ));
+            args.push(prompt.to_string());
             args
         }
         _ => return Err("Unknown agent".to_string()),
@@ -22962,6 +23321,7 @@ fn detect_runtimes() -> BTreeMap<String, AgentRuntime> {
         ("codex", "-V"),
         ("claude", "--version"),
         ("gemini", "--version"),
+        ("kiro", "-V"),
     ] {
         let command_path = resolve_agent_command_path(agent_id);
 
@@ -22995,7 +23355,10 @@ fn detect_runtimes() -> BTreeMap<String, AgentRuntime> {
 }
 
 fn resolve_agent_command_path(agent_id: &str) -> Option<String> {
-    resolve_command_path(agent_id)
+    match agent_id {
+        "kiro" => resolve_command_path("kiro-cli"),
+        _ => resolve_command_path(agent_id),
+    }
 }
 
 fn detect_agent_resources(agent_id: &str) -> AgentRuntimeResources {
@@ -23003,6 +23366,12 @@ fn detect_agent_resources(agent_id: &str) -> AgentRuntimeResources {
         "codex" => detect_codex_resources(),
         "claude" => detect_claude_resources(),
         "gemini" => detect_gemini_resources(),
+        "kiro" => AgentRuntimeResources {
+            mcp: resource_group(true),
+            plugin: resource_group(false),
+            extension: resource_group(false),
+            skill: resource_group(false),
+        },
         _ => AgentRuntimeResources::default(),
     }
 }
@@ -23976,6 +24345,7 @@ fn remote_cli_command_name(cli_id: &str) -> String {
     match cli_id {
         "claude" => "claude".to_string(),
         "gemini" => "gemini".to_string(),
+        "kiro" => "kiro-cli".to_string(),
         _ => "codex".to_string(),
     }
 }
@@ -24950,7 +25320,10 @@ fn run_cli_command(command_path: &str, args: &[&str], timeout_ms: u64) -> Option
         stderr = if trimmed_stderr.is_empty() {
             format!("CLI version probe timed out after {}ms.", timeout_ms)
         } else {
-            format!("{}\nCLI version probe timed out after {}ms.", trimmed_stderr, timeout_ms)
+            format!(
+                "{}\nCLI version probe timed out after {}ms.",
+                trimmed_stderr, timeout_ms
+            )
         };
     }
 
@@ -26396,7 +26769,7 @@ fn load_or_seed_claude_approval_rules() -> Result<ClaudeApprovalRules, String> {
 
 fn seed_context() -> ContextStore {
     let mut agents = BTreeMap::new();
-    for id in ["codex", "claude", "gemini"] {
+    for id in ["codex", "claude", "gemini", "kiro"] {
         agents.insert(
             id.to_string(),
             AgentContext {
@@ -26421,6 +26794,7 @@ fn seed_settings(project_root: &str) -> AppSettings {
             codex: "auto".to_string(),
             claude: "auto".to_string(),
             gemini: "auto".to_string(),
+            kiro: "auto".to_string(),
         },
         ssh_connections: Vec::new(),
         custom_agents: Vec::new(),
@@ -26446,6 +26820,13 @@ fn seed_settings(project_root: &str) -> AppSettings {
             auto_check_for_updates: true,
             notify_on_update_available: false,
         },
+        platform_account_view_modes: default_platform_account_view_modes(),
+        global_proxy_enabled: false,
+        global_proxy_url: String::new(),
+        global_proxy_no_proxy: String::new(),
+        codex_auto_refresh_minutes: default_codex_auto_refresh_minutes(),
+        gemini_auto_refresh_minutes: default_gemini_auto_refresh_minutes(),
+        kiro_auto_refresh_minutes: default_kiro_auto_refresh_minutes(),
         openai_compatible_providers: Vec::new(),
         claude_providers: Vec::new(),
         gemini_providers: Vec::new(),
@@ -26496,6 +26877,15 @@ fn seed_state(project_root: &str) -> AppStateDto {
             time: now_label(),
         }],
     );
+    terminal_by_agent.insert(
+        "kiro".to_string(),
+        vec![TerminalLine {
+            id: create_id("line"),
+            speaker: "kiro".to_string(),
+            content: "Kiro lane is standing by for headless task execution.".to_string(),
+            time: now_label(),
+        }],
+    );
 
     AppStateDto {
         workspace: WorkspaceState {
@@ -26541,6 +26931,17 @@ fn seed_state(project_root: &str) -> AppStateDto {
                 "Interface lane prepared for design critique and visual refinement.",
                 "Waiting for a UI-focused prompt or review request.",
                 "gemini:latest",
+                unavailable_runtime(),
+            ),
+            base_agent(
+                "kiro",
+                "Kiro",
+                "standby",
+                "ready",
+                "Headless execution, autonomous tool use, Kiro CLI workflows",
+                "Kiro lane prepared for direct task execution.",
+                "Waiting for a Kiro prompt or review request.",
+                "kiro:latest",
                 unavailable_runtime(),
             ),
         ],
@@ -26847,9 +27248,10 @@ pub fn run() {
     let startup_context = Arc::new(Mutex::new(
         load_or_seed_context(&project_root).unwrap_or_else(|_| seed_context()),
     ));
-    let startup_settings = Arc::new(Mutex::new(
-        load_or_seed_settings(&project_root).unwrap_or_else(|_| seed_settings(&project_root)),
-    ));
+    let startup_settings_value =
+        load_or_seed_settings(&project_root).unwrap_or_else(|_| seed_settings(&project_root));
+    sync_global_proxy_env(&startup_settings_value);
+    let startup_settings = Arc::new(Mutex::new(startup_settings_value));
     let scheduler_state = startup_state.clone();
     let scheduler_context = startup_context.clone();
     let scheduler_settings = startup_settings.clone();
@@ -26954,6 +27356,7 @@ pub fn run() {
                 scheduler_workflow_runs.clone(),
                 scheduler_active_workflows.clone(),
             );
+            spawn_platform_auto_refresh_worker(scheduler_settings.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -27075,6 +27478,55 @@ pub fn run() {
             get_settings,
             update_settings,
             refresh_provider_models,
+            platform_accounts::list_codex_accounts,
+            platform_accounts::list_gemini_accounts,
+            platform_accounts::list_kiro_accounts,
+            platform_accounts::codex_oauth_login_start,
+            platform_accounts::gemini_oauth_login_start,
+            platform_accounts::kiro_oauth_login_start,
+            platform_accounts::codex_oauth_login_completed,
+            platform_accounts::gemini_oauth_login_complete,
+            platform_accounts::kiro_oauth_login_complete,
+            platform_accounts::codex_oauth_login_cancel,
+            platform_accounts::gemini_oauth_login_cancel,
+            platform_accounts::kiro_oauth_login_cancel,
+            platform_accounts::codex_oauth_submit_callback_url,
+            platform_accounts::gemini_oauth_submit_callback_url,
+            platform_accounts::kiro_oauth_submit_callback_url,
+            platform_accounts::add_codex_account_with_api_key,
+            platform_accounts::add_codex_account_with_token,
+            platform_accounts::add_gemini_account_with_token,
+            platform_accounts::add_kiro_account_with_token,
+            platform_accounts::import_codex_from_json,
+            platform_accounts::import_gemini_from_json,
+            platform_accounts::import_kiro_from_json,
+            platform_accounts::import_codex_from_local,
+            platform_accounts::import_gemini_from_local,
+            platform_accounts::import_kiro_from_local,
+            platform_accounts::export_codex_accounts,
+            platform_accounts::export_gemini_accounts,
+            platform_accounts::export_kiro_accounts,
+            platform_accounts::switch_codex_account,
+            platform_accounts::switch_gemini_account,
+            platform_accounts::switch_kiro_account,
+            platform_accounts::get_current_codex_account,
+            platform_accounts::get_provider_current_account_id,
+            platform_accounts::delete_codex_account,
+            platform_accounts::delete_codex_accounts,
+            platform_accounts::delete_gemini_account,
+            platform_accounts::delete_gemini_accounts,
+            platform_accounts::delete_kiro_account,
+            platform_accounts::delete_kiro_accounts,
+            platform_accounts::refresh_codex_account_profile,
+            platform_accounts::refresh_all_codex_quotas,
+            platform_accounts::refresh_gemini_token,
+            platform_accounts::refresh_all_gemini_tokens,
+            platform_accounts::refresh_kiro_token,
+            platform_accounts::refresh_all_kiro_tokens,
+            platform_accounts::update_codex_account_tags,
+            platform_accounts::update_codex_api_key_credentials,
+            platform_accounts::update_gemini_account_tags,
+            platform_accounts::update_kiro_account_tags,
             send_api_chat_message,
             send_test_email_notification,
             execute_acp_command,
@@ -27089,4 +27541,160 @@ pub fn run() {
 
 fn main() {
     run();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn settings_seed_includes_platform_account_proxy_defaults() {
+        let settings = seed_settings("/tmp/demo-project");
+
+        assert_eq!(settings.platform_account_view_modes.codex, "grid");
+        assert_eq!(settings.platform_account_view_modes.gemini, "grid");
+        assert_eq!(settings.platform_account_view_modes.kiro, "grid");
+        assert!(!settings.global_proxy_enabled);
+        assert_eq!(settings.global_proxy_url, "");
+        assert_eq!(settings.global_proxy_no_proxy, "");
+        assert_eq!(settings.codex_auto_refresh_minutes, 10);
+        assert_eq!(settings.gemini_auto_refresh_minutes, 10);
+        assert_eq!(settings.kiro_auto_refresh_minutes, 10);
+    }
+
+    #[test]
+    fn settings_normalize_backfills_platform_account_proxy_defaults() {
+        let mut settings: AppSettings = serde_json::from_value(json!({
+            "cliPaths": {
+                "codex": "auto",
+                "claude": "auto",
+                "gemini": "auto",
+                "kiro": "auto"
+            },
+            "sshConnections": [],
+            "customAgents": [],
+            "projectRoot": "/tmp/demo-project",
+            "maxTurnsPerAgent": 8,
+            "maxOutputCharsPerTurn": 12000,
+            "modelChatContextTurnLimit": 12,
+            "processTimeoutMs": 300000,
+            "notifyOnTerminalCompletion": false,
+            "notificationConfig": {},
+            "updateConfig": {},
+            "openaiCompatibleProviders": [],
+            "claudeProviders": [],
+            "geminiProviders": []
+        }))
+        .expect("settings should deserialize");
+
+        normalize_settings_providers(&mut settings);
+
+        assert_eq!(settings.platform_account_view_modes.codex, "grid");
+        assert_eq!(settings.platform_account_view_modes.gemini, "grid");
+        assert_eq!(settings.platform_account_view_modes.kiro, "grid");
+        assert!(!settings.global_proxy_enabled);
+        assert_eq!(settings.global_proxy_url, "");
+        assert_eq!(settings.global_proxy_no_proxy, "");
+        assert_eq!(settings.codex_auto_refresh_minutes, 10);
+        assert_eq!(settings.gemini_auto_refresh_minutes, 10);
+        assert_eq!(settings.kiro_auto_refresh_minutes, 10);
+    }
+
+    #[test]
+    fn proxy_managed_env_pairs_include_proxy_and_no_proxy_keys() {
+        let settings = AppSettings {
+            global_proxy_enabled: true,
+            global_proxy_url: "http://127.0.0.1:7890".to_string(),
+            global_proxy_no_proxy: "localhost,127.0.0.1".to_string(),
+            ..seed_settings("/tmp/demo-project")
+        };
+
+        let pairs = managed_proxy_env_pairs(&settings);
+
+        assert!(pairs.contains(&("http_proxy", "http://127.0.0.1:7890".to_string())));
+        assert!(pairs.contains(&("https_proxy", "http://127.0.0.1:7890".to_string())));
+        assert!(pairs.contains(&("all_proxy", "http://127.0.0.1:7890".to_string())));
+        assert!(pairs.contains(&("HTTP_PROXY", "http://127.0.0.1:7890".to_string())));
+        assert!(pairs.contains(&("HTTPS_PROXY", "http://127.0.0.1:7890".to_string())));
+        assert!(pairs.contains(&("ALL_PROXY", "http://127.0.0.1:7890".to_string())));
+        assert!(pairs.contains(&("no_proxy", "localhost,127.0.0.1".to_string())));
+        assert!(pairs.contains(&("NO_PROXY", "localhost,127.0.0.1".to_string())));
+    }
+
+    #[test]
+    fn proxy_managed_env_pairs_are_empty_when_disabled_or_blank() {
+        let disabled = AppSettings {
+            global_proxy_enabled: false,
+            global_proxy_url: "http://127.0.0.1:7890".to_string(),
+            ..seed_settings("/tmp/demo-project")
+        };
+        let blank_url = AppSettings {
+            global_proxy_enabled: true,
+            global_proxy_url: "   ".to_string(),
+            ..seed_settings("/tmp/demo-project")
+        };
+
+        assert!(managed_proxy_env_pairs(&disabled).is_empty());
+        assert!(managed_proxy_env_pairs(&blank_url).is_empty());
+    }
+
+    #[test]
+    fn auto_refresh_interval_is_disabled_when_minutes_non_positive() {
+        assert_eq!(auto_refresh_interval_ms(0), None);
+        assert_eq!(auto_refresh_interval_ms(-1), None);
+        assert_eq!(auto_refresh_interval_ms(10), Some(600_000));
+    }
+
+    #[test]
+    fn auto_refresh_due_is_calculated_per_platform() {
+        let settings = AppSettings {
+            codex_auto_refresh_minutes: 5,
+            gemini_auto_refresh_minutes: 10,
+            kiro_auto_refresh_minutes: 0,
+            ..seed_settings("/tmp/demo-project")
+        };
+
+        assert!(auto_refresh_is_due(
+            platform_auto_refresh_minutes(&settings, PlatformAutoRefreshKind::Codex),
+            300_000,
+            Some(0)
+        ));
+        assert!(!auto_refresh_is_due(
+            platform_auto_refresh_minutes(&settings, PlatformAutoRefreshKind::Gemini),
+            300_000,
+            Some(0)
+        ));
+        assert!(!auto_refresh_is_due(
+            platform_auto_refresh_minutes(&settings, PlatformAutoRefreshKind::Kiro),
+            300_000,
+            Some(0)
+        ));
+    }
+
+    #[test]
+    fn auto_refresh_reads_updated_settings_values() {
+        let mut settings = seed_settings("/tmp/demo-project");
+
+        assert_eq!(
+            platform_auto_refresh_minutes(&settings, PlatformAutoRefreshKind::Codex),
+            10
+        );
+        settings.codex_auto_refresh_minutes = 2;
+        settings.gemini_auto_refresh_minutes = 7;
+        settings.kiro_auto_refresh_minutes = 11;
+
+        assert_eq!(
+            platform_auto_refresh_minutes(&settings, PlatformAutoRefreshKind::Codex),
+            2
+        );
+        assert_eq!(
+            platform_auto_refresh_minutes(&settings, PlatformAutoRefreshKind::Gemini),
+            7
+        );
+        assert_eq!(
+            platform_auto_refresh_minutes(&settings, PlatformAutoRefreshKind::Kiro),
+            11
+        );
+    }
 }

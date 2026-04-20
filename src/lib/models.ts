@@ -1,4 +1,4 @@
-export type AgentId = "codex" | "claude" | "gemini";
+export type AgentId = "codex" | "claude" | "gemini" | "kiro";
 
 export type AgentMode =
   | "writer"
@@ -118,6 +118,7 @@ export interface CliPathsDetection {
   codex: string | null;
   claude: string | null;
   gemini: string | null;
+  kiro: string | null;
 }
 
 export interface SshConnectionConfig {
@@ -146,6 +147,14 @@ export interface SshConnectionTestResult {
   platform: string | null;
   detectedCliPaths: CliPathsDetection;
   errors: string[];
+}
+
+export type PlatformAccountViewMode = "list" | "grid";
+
+export interface PlatformAccountViewModes {
+  codex: PlatformAccountViewMode;
+  gemini: PlatformAccountViewMode;
+  kiro: PlatformAccountViewMode;
 }
 
 export interface WorkspaceRef {
@@ -383,7 +392,7 @@ export interface ApiChatStreamEvent {
 }
 
 export interface AppSettings {
-  cliPaths: { codex: string; claude: string; gemini: string };
+  cliPaths: { codex: string; claude: string; gemini: string; kiro: string };
   sshConnections: SshConnectionConfig[];
   customAgents: CustomAgentConfig[];
   projectRoot: string;
@@ -394,6 +403,13 @@ export interface AppSettings {
   notifyOnTerminalCompletion: boolean;
   notificationConfig: NotificationConfig;
   updateConfig: UpdateConfig;
+  platformAccountViewModes: PlatformAccountViewModes;
+  globalProxyEnabled: boolean;
+  globalProxyUrl: string;
+  globalProxyNoProxy: string;
+  codexAutoRefreshMinutes: number;
+  geminiAutoRefreshMinutes: number;
+  kiroAutoRefreshMinutes: number;
   openaiCompatibleProviders: ModelProviderConfig[];
   claudeProviders: ModelProviderConfig[];
   geminiProviders: ModelProviderConfig[];
@@ -1313,7 +1329,7 @@ export interface WorkspaceFileIndexResponse {
   files: FileMentionCandidate[];
 }
 
-export type SettingsEngineType = "claude" | "codex" | "gemini";
+export type SettingsEngineType = "claude" | "codex" | "gemini" | "kiro";
 
 export interface SettingsEngineStatus {
   engineType: SettingsEngineType;
@@ -1624,6 +1640,7 @@ export type LocalUsageStatistics = {
 export type AgentTransportKind =
   | "codex-app-server"
   | "claude-cli"
+  | "kiro-cli"
   | "gemini-cli"
   | "gemini-acp"
   | "browser-fallback";

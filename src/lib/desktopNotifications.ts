@@ -23,6 +23,7 @@ const CLI_LABEL: Record<AgentId, string> = {
   codex: "Codex",
   claude: "Claude Code",
   gemini: "Gemini CLI",
+  kiro: "Kiro CLI",
 };
 
 let trackedFocusState = true;

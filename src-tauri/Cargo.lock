@@ -2386,8 +2386,9 @@ dependencies = [
 
 [[package]]
 name = "multi-cli-studio"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "cron",
  "dirs",
@@ -2398,12 +2399,14 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-notification",
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "trash",
+ "urlencoding",
  "uuid",
 ]
 

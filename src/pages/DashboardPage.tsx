@@ -39,6 +39,12 @@ const CLI_THEME: Record<
     color: "#0f766e",
     muted: "#a7f3d0",
   },
+  kiro: {
+    chip: "bg-slate-900 text-white",
+    text: "text-slate-900",
+    color: "#111827",
+    muted: "#cbd5e1",
+  },
 };
 
 function terminalVolume(lines: { content: string }[] | undefined) {

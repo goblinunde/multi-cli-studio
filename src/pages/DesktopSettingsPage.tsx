@@ -15,11 +15,12 @@ import {
   Settings,
 } from "lucide-react";
 import { DesktopConnectionsSection } from "../components/settings/DesktopConnectionsSection";
+import { GlobalGitDrawer } from "../components/settings/GlobalGitDrawer";
 import { DesktopMcpSection } from "../components/settings/DesktopMcpSection";
+import { DesktopNetworkSection } from "../components/settings/DesktopNetworkSection";
 import { DesktopSkillsSection } from "../components/settings/DesktopSkillsSection";
 import { DesktopUsageSection } from "../components/settings/DesktopUsageSection";
 import { DesktopVendorsSection } from "../components/settings/DesktopVendorsSection";
-import { GlobalGitDrawer } from "../components/settings/GlobalGitDrawer";
 import { useStore } from "../lib/store";
 import type { AgentId, GitPanelData, TerminalTab, WorkspaceRef } from "../lib/models";
 
@@ -585,7 +586,10 @@ export function DesktopSettingsPage() {
             ) : null}
 
             {!outlet && activeSection === "connections" ? (
-              <DesktopConnectionsSection settings={settings} />
+              <div className="space-y-6">
+                <DesktopNetworkSection settings={settings} />
+                <DesktopConnectionsSection settings={settings} />
+              </div>
             ) : null}
 
             {!outlet && activeSection === "mcp" ? (

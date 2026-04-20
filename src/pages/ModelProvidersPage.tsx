@@ -9,6 +9,7 @@ import {
   normalizeProviderSettings,
   setProvidersForServiceType,
 } from "../lib/modelProviders";
+import { PLATFORM_CENTER_API_PATH } from "../lib/platformCenterRoutes";
 import {
   ChatIcon,
   cx,
@@ -32,7 +33,7 @@ export function ModelProvidersPage({ embedded = false }: { embedded?: boolean })
   const [statusText, setStatusText] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const activeServiceType = parseServiceType(searchParams.get("serviceType"));
-  const providersBasePath = "/settings/model-providers";
+  const providersBasePath = PLATFORM_CENTER_API_PATH;
 
   useEffect(() => {
     let cancelled = false;

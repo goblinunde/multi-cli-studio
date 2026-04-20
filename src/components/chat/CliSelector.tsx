@@ -5,12 +5,14 @@ import { useStore } from "../../lib/store";
 import openaiIcon from "../../media/svg/openai.svg";
 import claudeIcon from "../../media/svg/claude-color.svg";
 import geminiIcon from "../../media/svg/gemini-color.svg";
+import kiroIcon from "../../media/svg/kiro-color.svg";
 
 export const CLI_OPTIONS: { id: TerminalCliId; label: string; icon?: string }[] = [
   { id: "auto", label: "Auto" },
   { id: "codex", label: "Codex", icon: openaiIcon },
   { id: "claude", label: "Claude", icon: claudeIcon },
   { id: "gemini", label: "Gemini", icon: geminiIcon },
+  { id: "kiro", label: "Kiro", icon: kiroIcon },
 ];
 
 export const CliSelector = memo(function CliSelector() {
@@ -40,7 +42,7 @@ export const CliSelector = memo(function CliSelector() {
         className="pointer-events-none absolute bottom-1 top-1 rounded-[16px] border border-white/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(247,250,252,0.96)_100%)] shadow-[0_10px_24px_rgba(15,23,42,0.10)] transition-transform duration-200 ease-out"
         style={{
           left: "4px",
-          width: "calc((100% - 8px) / 4)",
+          width: `calc((100% - 8px) / ${CLI_OPTIONS.length})`,
           transform: `translateX(${selectedIndex * 100}%)`,
         }}
       />

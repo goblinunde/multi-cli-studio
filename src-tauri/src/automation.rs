@@ -1502,6 +1502,7 @@ pub fn normalize_execution_mode(value: &str) -> String {
         "codex" => "codex".to_string(),
         "claude" => "claude".to_string(),
         "gemini" => "gemini".to_string(),
+        "kiro" => "kiro".to_string(),
         _ => "auto".to_string(),
     }
 }
@@ -1795,6 +1796,7 @@ fn normalize_workflow_node_execution_mode(value: &str) -> String {
         "codex" => "codex".to_string(),
         "claude" => "claude".to_string(),
         "gemini" => "gemini".to_string(),
+        "kiro" => "kiro".to_string(),
         _ => default_workflow_node_execution_mode(),
     }
 }

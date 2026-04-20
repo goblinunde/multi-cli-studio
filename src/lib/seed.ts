@@ -149,6 +149,16 @@ export function createSeedState(projectRoot = "C:\\Users\\admin\\source\\repos\\
         "Interface lane prepared for design critique and visual refinement.",
         "Waiting for a UI-focused prompt or review request.",
         "gemini:latest"
+      ),
+      baseAgent(
+        "kiro",
+        "Kiro",
+        "standby",
+        "ready",
+        "Headless execution, autonomous tool use, Kiro CLI workflows",
+        "Kiro lane prepared for direct task execution.",
+        "Waiting for a Kiro prompt or review request.",
+        "kiro:latest"
       )
     ],
     handoffs: [
@@ -216,6 +226,14 @@ export function createSeedState(projectRoot = "C:\\Users\\admin\\source\\repos\\
           id: createId("line"),
           speaker: "gemini",
           content: "Interface lane is standing by for UI critique and visual refinement.",
+          time: nowTime()
+        }
+      ],
+      kiro: [
+        {
+          id: createId("line"),
+          speaker: "kiro",
+          content: "Kiro lane is standing by for headless task execution.",
           time: nowTime()
         }
       ]

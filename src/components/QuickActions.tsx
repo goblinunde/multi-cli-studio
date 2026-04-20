@@ -5,6 +5,7 @@ const AGENTS: { id: AgentId; label: string }[] = [
   { id: "codex", label: "Codex" },
   { id: "claude", label: "Claude" },
   { id: "gemini", label: "Gemini" },
+  { id: "kiro", label: "Kiro" },
 ];
 
 export function QuickActions() {

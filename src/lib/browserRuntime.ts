@@ -156,6 +156,8 @@ function defaultTransportKind(agentId: AgentId): AgentTransportKind {
       return "codex-app-server";
     case "claude":
       return "claude-cli";
+    case "kiro":
+      return "kiro-cli";
     case "gemini":
       return "gemini-acp";
     default:
@@ -186,6 +188,13 @@ function fallbackResources(agentId: AgentId): AgentRuntimeResources {
         plugin: defaultResourceGroup(true),
         extension: defaultResourceGroup(false),
         skill: defaultResourceGroup(true),
+      };
+    case "kiro":
+      return {
+        mcp: defaultResourceGroup(true),
+        plugin: defaultResourceGroup(false),
+        extension: defaultResourceGroup(false),
+        skill: defaultResourceGroup(false),
       };
     default:
       return {
@@ -228,6 +237,7 @@ function fallbackCliSkills(cliId: AgentId): CliSkillItem[] {
       },
     ],
     gemini: [],
+    kiro: [],
   };
 
   return itemsByCli[cliId];
@@ -344,12 +354,17 @@ function parsePositiveNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function parseNonNegativeNumber(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
 function createSeedContext(): ContextStore {
   return {
     agents: {
       codex: { agentId: "codex", conversationHistory: [], totalTokenEstimate: 0 },
       claude: { agentId: "claude", conversationHistory: [], totalTokenEstimate: 0 },
       gemini: { agentId: "gemini", conversationHistory: [], totalTokenEstimate: 0 },
+      kiro: { agentId: "kiro", conversationHistory: [], totalTokenEstimate: 0 },
     },
     conversationHistory: [],
     handoffs: [],
@@ -360,7 +375,7 @@ function createSeedContext(): ContextStore {
 
 function defaultSettings(): AppSettings {
   return normalizeProviderSettings({
-    cliPaths: { codex: "auto", claude: "auto", gemini: "auto" },
+    cliPaths: { codex: "auto", claude: "auto", gemini: "auto", kiro: "auto" },
     sshConnections: [],
     customAgents: [],
     projectRoot: state?.workspace?.projectRoot ?? "C:\\Users\\admin\\source\\repos\\multi-cli-studio",
@@ -385,6 +400,17 @@ function defaultSettings(): AppSettings {
       autoCheckForUpdates: true,
       notifyOnUpdateAvailable: false,
     },
+    platformAccountViewModes: {
+      codex: "grid",
+      gemini: "grid",
+      kiro: "grid",
+    },
+    globalProxyEnabled: false,
+    globalProxyUrl: "",
+    globalProxyNoProxy: "",
+    codexAutoRefreshMinutes: 10,
+    geminiAutoRefreshMinutes: 10,
+    kiroAutoRefreshMinutes: 10,
     openaiCompatibleProviders: [],
     claudeProviders: [],
     geminiProviders: [],
@@ -488,6 +514,10 @@ function normalizeSshConnections(
             typeof raw.detectedCliPaths?.gemini === "string" && raw.detectedCliPaths.gemini.trim()
               ? raw.detectedCliPaths.gemini.trim()
               : null,
+          kiro:
+            typeof raw.detectedCliPaths?.kiro === "string" && raw.detectedCliPaths.kiro.trim()
+              ? raw.detectedCliPaths.kiro.trim()
+              : null,
         },
       } satisfies AppSettings["sshConnections"][number];
     })
@@ -500,6 +530,7 @@ function normalizeSettings(value: unknown): AppSettings {
 
   const raw = value as Partial<AppSettings> & {
     cliPaths?: Partial<AppSettings["cliPaths"]>;
+    platformAccountViewModes?: Partial<AppSettings["platformAccountViewModes"]>;
   };
 
   return normalizeProviderSettings({
@@ -543,6 +574,31 @@ function normalizeSettings(value: unknown): AppSettings {
     notifyOnTerminalCompletion: raw.notifyOnTerminalCompletion === true,
     notificationConfig: normalizeNotificationConfig(raw.notificationConfig, defaults.notificationConfig),
     updateConfig: normalizeUpdateConfig(raw.updateConfig, defaults.updateConfig),
+    platformAccountViewModes: {
+      ...defaults.platformAccountViewModes,
+      ...(raw.platformAccountViewModes ?? {}),
+    },
+    globalProxyEnabled: raw.globalProxyEnabled === true,
+    globalProxyUrl:
+      typeof raw.globalProxyUrl === "string"
+        ? raw.globalProxyUrl.trim()
+        : defaults.globalProxyUrl,
+    globalProxyNoProxy:
+      typeof raw.globalProxyNoProxy === "string"
+        ? raw.globalProxyNoProxy.trim()
+        : defaults.globalProxyNoProxy,
+    codexAutoRefreshMinutes: parseNonNegativeNumber(
+      raw.codexAutoRefreshMinutes,
+      defaults.codexAutoRefreshMinutes
+    ),
+    geminiAutoRefreshMinutes: parseNonNegativeNumber(
+      raw.geminiAutoRefreshMinutes,
+      defaults.geminiAutoRefreshMinutes
+    ),
+    kiroAutoRefreshMinutes: parseNonNegativeNumber(
+      raw.kiroAutoRefreshMinutes,
+      defaults.kiroAutoRefreshMinutes
+    ),
     openaiCompatibleProviders: raw.openaiCompatibleProviders ?? defaults.openaiCompatibleProviders,
     claudeProviders: raw.claudeProviders ?? defaults.claudeProviders,
     geminiProviders: raw.geminiProviders ?? defaults.geminiProviders,
@@ -3170,6 +3226,7 @@ export const browserRuntime = {
       { engineType: "claude", installed: true, version: "browser-fallback", binPath: null, error: null },
       { engineType: "codex", installed: true, version: "browser-fallback", binPath: null, error: null },
       { engineType: "gemini", installed: true, version: "browser-fallback", binPath: null, error: null },
+      { engineType: "kiro", installed: true, version: "browser-fallback", binPath: null, error: null },
     ];
   },
 
@@ -3184,6 +3241,7 @@ export const browserRuntime = {
         codex: null,
         claude: null,
         gemini: null,
+        kiro: null,
       },
       errors: ["SSH 连接测试仅在桌面端运行时可用。"],
     };
@@ -3885,7 +3943,12 @@ rename to src/components/chat/GitPanel.tsx`,
       case "permissions": {
         const mode = command.args[0] || "";
         if (!mode) {
-          const defaults: Record<AgentId, string> = { codex: "workspace-write", claude: "acceptEdits", gemini: "auto_edit" };
+          const defaults: Record<AgentId, string> = {
+            codex: "workspace-write",
+            claude: "acceptEdits",
+            gemini: "auto_edit",
+            kiro: "trust-all-tools",
+          };
           const current = acpSession.permissionMode[cliId] || defaults[cliId];
           return { success: true, output: `Current permission mode for ${cliId}: ${current}`, sideEffects: [] };
         }
@@ -4044,6 +4107,7 @@ rename to src/components/chat/GitPanel.tsx`,
         { value: "gemini-2.5-flash", label: "gemini-2.5-flash", description: "Fast Gemini 2.5 Flash model", source: "fallback" as const },
         { value: "gemini-2.5-flash-lite", label: "gemini-2.5-flash-lite", description: "Lightweight Gemini 2.5 Flash Lite model", source: "fallback" as const },
       ],
+      kiro: [],
     } satisfies Record<AgentId, AcpCliCapabilities["model"]["options"]>;
 
     const permissionOptions = {
@@ -4066,12 +4130,16 @@ rename to src/components/chat/GitPanel.tsx`,
         { value: "yolo", label: "yolo", description: "Auto-approve all tools", source: "runtime" as const },
         { value: "plan", label: "plan", description: "Read-only plan mode", source: "runtime" as const },
       ],
+      kiro: [
+        { value: "read,grep", label: "read,grep", description: "Allow read-only tools in headless mode", source: "runtime" as const },
+        { value: "trust-all-tools", label: "trust-all-tools", description: "Trust all tools for headless execution", source: "runtime" as const },
+      ],
     } satisfies Record<AgentId, AcpCliCapabilities["permissions"]["options"]>;
 
     return {
       cliId,
       model: {
-        supported: true,
+        supported: cliId !== "kiro",
         options: fallbackModels[cliId],
         note: "Browser fallback cannot interrogate the installed CLI, so model presets are curated.",
       },

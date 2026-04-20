@@ -59,6 +59,16 @@ function detectGitHubRepository() {
 }
 
 function parseGitHubRepository(value) {
-  const match = value.match(/github\.com[:/]([^/]+\/[^/.]+?)(?:\.git)?$/);
-  return match?.[1] ?? null;
+  const normalized = value.trim();
+  const httpsMatch = normalized.match(/github\.com[:/]([^/]+\/[^/.]+?)(?:\.git)?$/i);
+  if (httpsMatch) {
+    return httpsMatch[1];
+  }
+
+  const sshAliasMatch = normalized.match(/^(?:ssh:\/\/)?git@([^/:]+)[:/]([^/]+\/[^/.]+?)(?:\.git)?$/i);
+  if (sshAliasMatch && sshAliasMatch[1].toLowerCase().includes("github")) {
+    return sshAliasMatch[2];
+  }
+
+  return null;
 }

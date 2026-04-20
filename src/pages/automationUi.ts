@@ -121,6 +121,8 @@ export function executionModeLabel(value?: AutomationExecutionMode | string | nu
       return "Claude";
     case "gemini":
       return "Gemini";
+    case "kiro":
+      return "Kiro";
     default:
       return "自动模式";
   }

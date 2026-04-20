@@ -149,6 +149,18 @@ function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
 
+function readStoredSidebarCollapsed() {
+  if (typeof window === "undefined") return false;
+  const raw = window.localStorage.getItem("sidebar_collapsed");
+  if (raw == null) return false;
+  try {
+    return Boolean(JSON.parse(raw));
+  } catch {
+    window.localStorage.removeItem("sidebar_collapsed");
+    return false;
+  }
+}
+
 function SidebarLink({
   to,
   label,
@@ -350,10 +362,7 @@ export function Sidebar() {
 
   // Persist collapse state
   useEffect(() => {
-    const saved = localStorage.getItem('sidebar_collapsed');
-    if (saved !== null) {
-      setCollapsed(JSON.parse(saved));
-    }
+    setCollapsed(readStoredSidebarCollapsed());
   }, []);
 
   useEffect(() => {

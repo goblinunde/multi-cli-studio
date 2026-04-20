@@ -1,7 +1,7 @@
 import { useStore } from "../lib/store";
 import { AgentId } from "../lib/models";
 
-const AGENT_IDS: AgentId[] = ["codex", "claude", "gemini"];
+const AGENT_IDS: AgentId[] = ["codex", "claude", "gemini", "kiro"];
 
 export function AgentTabs() {
   const appState = useStore((s) => s.appState);

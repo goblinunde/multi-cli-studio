@@ -12,6 +12,7 @@ export const VENDOR_MODEL_STORAGE_KEYS = {
   claude: "claude-custom-models",
   codex: "codex-custom-models",
   gemini: "gemini-custom-models",
+  kiro: "kiro-custom-models",
 } as const satisfies Record<VendorTab, string>;
 
 export type GeminiAuthMode =

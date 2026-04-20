@@ -33,6 +33,7 @@ function createDraft(seed?: Partial<SshConnectionConfig>): SshConnectionConfig {
       codex: null,
       claude: null,
       gemini: null,
+      kiro: null,
     },
   };
 }
@@ -183,6 +184,7 @@ export function DesktopConnectionsSection({ settings }: { settings: AppSettings 
         codex: null,
         claude: null,
         gemini: null,
+        kiro: null,
       };
     }
 
@@ -526,7 +528,8 @@ export function DesktopConnectionsSection({ settings }: { settings: AppSettings 
                 <div>认证：{testResult.authOk ? "通过" : "失败"}</div>
                 <div>Codex：{cliDetectionLabel(testResult.detectedCliPaths.codex)}</div>
                 <div>Claude：{cliDetectionLabel(testResult.detectedCliPaths.claude)}</div>
-                <div className="md:col-span-2">Gemini：{cliDetectionLabel(testResult.detectedCliPaths.gemini)}</div>
+                <div>Gemini：{cliDetectionLabel(testResult.detectedCliPaths.gemini)}</div>
+                <div>Kiro：{cliDetectionLabel(testResult.detectedCliPaths.kiro)}</div>
               </div>
               {testResult.errors.length > 0 ? (
                 <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">

@@ -18,6 +18,7 @@ const CLI_BADGE: Record<AgentId, { bg: string; text: string; label: string }> = 
   codex: { bg: "bg-blue-500", text: "text-white", label: "Codex" },
   claude: { bg: "bg-amber-500", text: "text-white", label: "Claude" },
   gemini: { bg: "bg-emerald-500", text: "text-white", label: "Gemini" },
+  kiro: { bg: "bg-slate-900", text: "text-white", label: "Kiro" },
 };
 
 function basename(path: string) {
@@ -992,7 +993,10 @@ function orchestrationStatusTone(status?: string | null) {
 }
 
 function orchestrationOwnerLabel(owner: AgentId) {
-  return owner === "claude" ? "Claude" : owner === "gemini" ? "Gemini" : "Codex";
+  if (owner === "claude") return "Claude";
+  if (owner === "gemini") return "Gemini";
+  if (owner === "kiro") return "Kiro";
+  return "Codex";
 }
 
 function RuntimeOrchestrationPlanBlock({

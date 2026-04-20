@@ -12,6 +12,7 @@ import {
   setProvidersForServiceType,
   touchProvider,
 } from "../lib/modelProviders";
+import { PLATFORM_CENTER_API_PATH } from "../lib/platformCenterRoutes";
 import {
   BackIcon,
   CloseIcon,
@@ -41,7 +42,7 @@ export function ModelProviderEditorPage({ embedded = false }: { embedded?: boole
     isNew ? searchParams.get("serviceType") : params.serviceType
   );
   const providerId = params.providerId ? decodeURIComponent(params.providerId) : null;
-  const providersBasePath = "/settings/model-providers";
+  const providersBasePath = PLATFORM_CENTER_API_PATH;
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [draft, setDraft] = useState<ModelProviderConfig | null>(null);

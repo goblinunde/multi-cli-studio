@@ -6,11 +6,12 @@ import refreshIcon from "../media/svg/refresh.svg";
 import { useStore } from "../lib/store";
 import { requestDesktopNotificationPermission } from "../lib/desktopNotifications";
 import { getProvidersForServiceType, MODEL_PROVIDER_META, MODEL_PROVIDER_SERVICE_ORDER } from "../lib/modelProviders";
+import { buildApiProviderEditorPath, PLATFORM_CENTER_API_PATH } from "../lib/platformCenterRoutes";
 import { SERVICE_ICONS, maskSecret, relativeTime } from "../components/modelProviders/ui";
 import { useAppUpdate } from "../features/update/AppUpdateProvider";
 
 // --- Configuration ---
-const CLI_ORDER = ["codex", "claude", "gemini"] as const;
+const CLI_ORDER = ["codex", "claude", "gemini", "kiro"] as const;
 const PLATFORM_ORDER = ["windows", "macos", "linux"] as const;
 const RESOURCE_ORDER: AgentResourceKind[] = ["mcp", "skill", "plugin", "extension"];
 
@@ -40,6 +41,7 @@ const CLI_META: Record<AgentId, { label: string; prompt: string }> = {
   codex: { label: "Codex", prompt: "runtime.codex" },
   claude: { label: "Claude Code", prompt: "runtime.claude" },
   gemini: { label: "Gemini CLI", prompt: "runtime.gemini" },
+  kiro: { label: "Kiro CLI", prompt: "runtime.kiro" },
 };
 
 const PLATFORM_LABEL: Record<Platform, string> = {
@@ -87,6 +89,14 @@ const GUIDES: Record<AgentId, { docs: string; install: Record<Platform, string> 
   gemini: {
     docs: "https://github.com/google-gemini/gemini-cli",
     install: { windows: "npm install -g @google/gemini-cli", macos: "brew install gemini-cli", linux: "npm install -g @google/gemini-cli" },
+  },
+  kiro: {
+    docs: "https://kiro.dev/docs/cli/",
+    install: {
+      windows: "暂未提供官方 Windows 安装命令",
+      macos: "curl -fsSL https://cli.kiro.dev/install | bash",
+      linux: "curl -fsSL https://cli.kiro.dev/install | bash",
+    },
   },
 };
 
@@ -163,6 +173,7 @@ function fallbackResources(agentId: AgentId): AgentRuntimeResources {
   switch (agentId) {
     case "codex": return { mcp: fallbackGroup(true), skill: fallbackGroup(true), plugin: fallbackGroup(false), extension: fallbackGroup(false) };
     case "claude": return { mcp: fallbackGroup(true), skill: fallbackGroup(true), plugin: fallbackGroup(true), extension: fallbackGroup(false) };
+    case "kiro": return { mcp: fallbackGroup(true), skill: fallbackGroup(false), plugin: fallbackGroup(false), extension: fallbackGroup(false) };
     default: return { mcp: fallbackGroup(true), skill: fallbackGroup(true), plugin: fallbackGroup(false), extension: fallbackGroup(true) };
   }
 }
@@ -398,6 +409,7 @@ export function SettingsPage({
         cliPaths: { ...storedSettings.cliPaths },
         notificationConfig: { ...storedSettings.notificationConfig },
         updateConfig: { ...storedSettings.updateConfig },
+        platformAccountViewModes: { ...storedSettings.platformAccountViewModes },
       });
       setEmailRecipientsInput((storedSettings.notificationConfig.emailRecipients ?? []).join(", "));
     }
@@ -755,7 +767,7 @@ export function SettingsPage({
                 icon={<CpuIcon />}
                 action={
                   <Link
-                    to="/settings/model-providers"
+                    to={PLATFORM_CENTER_API_PATH}
                     className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50"
                   >
                     打开模型管理
@@ -793,7 +805,7 @@ export function SettingsPage({
                               </div>
                             </div>
                             <Link
-                              to={`/settings/model-providers/${serviceType}/${provider.id}`}
+                              to={buildApiProviderEditorPath(serviceType, provider.id)}
                               className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50"
                             >
                               编辑

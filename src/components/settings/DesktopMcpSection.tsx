@@ -11,7 +11,7 @@ type CodexRuntimeServer = {
   templatesCount: number;
 };
 
-const ENGINE_ORDER: SettingsEngineType[] = ["claude", "codex", "gemini"];
+const ENGINE_ORDER: SettingsEngineType[] = ["claude", "codex", "gemini", "kiro"];
 
 function badgeClass(installed: boolean) {
   return installed ? "refined-badge refined-badge-success" : "refined-badge refined-badge-warn";
@@ -413,7 +413,7 @@ export function DesktopMcpSection({
                 onClick={() => setSelectedEngine(engine)}
               >
                 <div className="refined-engine-head">
-                  <div className="refined-engine-title">{engine === "codex" ? "Codex" : engine === "claude" ? "Claude Code" : "Gemini CLI"}</div>
+                  <div className="refined-engine-title">{engine === "codex" ? "Codex" : engine === "claude" ? "Claude Code" : engine === "gemini" ? "Gemini CLI" : "Kiro CLI"}</div>
                   <span className={badgeClass(Boolean(status?.installed))}>
                     {status?.installed ? "已安装" : "未安装"}
                   </span>
@@ -468,7 +468,7 @@ export function DesktopMcpSection({
               </span>
             </div>
             <div style={{ color: '#18181b', fontWeight: 500, fontSize: '0.875rem' }}>
-              {selectedEngine === "codex" ? "Codex" : selectedEngine === "claude" ? "Claude" : "Gemini"}
+              {selectedEngine === "codex" ? "Codex" : selectedEngine === "claude" ? "Claude" : selectedEngine === "gemini" ? "Gemini" : "Kiro"}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
               <div className="refined-detail-row">

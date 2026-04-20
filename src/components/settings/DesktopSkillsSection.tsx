@@ -24,18 +24,20 @@ import { cx } from "../modelProviders/ui";
 import { SkillMarkdownPreview } from "./SkillMarkdownPreview";
 
 type TreeNodeKind = "dir" | "file" | null;
-type GlobalEngine = "claude" | "codex" | "gemini";
+type GlobalEngine = "claude" | "codex" | "gemini" | "kiro";
 
-const ENGINE_ORDER: GlobalEngine[] = ["claude", "codex", "gemini"];
+const ENGINE_ORDER: GlobalEngine[] = ["claude", "codex", "gemini", "kiro"];
 const ENGINE_LABEL: Record<GlobalEngine, string> = {
   claude: "Claude Code",
   codex: "Codex",
   gemini: "Gemini CLI",
+  kiro: "Kiro CLI",
 };
 const ENGINE_PATH_MARKERS: Record<GlobalEngine, string[]> = {
   claude: ["/.claude/skills"],
   codex: ["/.codex/skills"],
   gemini: ["/.gemini/skills"],
+  kiro: ["/.kiro/agents", "/.kiro/prompts", "/.kiro/steering"],
 };
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "bmp", "ico"]);
 const MARKDOWN_EXTENSIONS = new Set(["md", "mdx"]);

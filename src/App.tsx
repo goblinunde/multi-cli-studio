@@ -1,5 +1,5 @@
-import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { useEffect } from "react";
+import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { AppLayout } from "./layouts/AppLayout";
 import { TerminalPage } from "./pages/TerminalPage";
 import { AutomationJobsPage } from "./pages/AutomationJobsPage";
@@ -7,20 +7,29 @@ import { AutomationJobEditorPage } from "./pages/AutomationJobEditorPage";
 import { AutomationWorkflowsPage } from "./pages/AutomationWorkflowsPage";
 import { AutomationWorkflowEditorPage } from "./pages/AutomationWorkflowEditorPage";
 import { ModelChatPage } from "./pages/ModelChatPage";
-import { ModelProviderEditorPage } from "./pages/ModelProviderEditorPage";
-import { ModelProvidersPage } from "./pages/ModelProvidersPage";
-import { DesktopAgentsPage } from "./pages/DesktopAgentsPage";
 import { DesktopSettingsPage } from "./pages/DesktopSettingsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ModelProvidersPage } from "./pages/ModelProvidersPage";
+import { ModelProviderEditorPage } from "./pages/ModelProviderEditorPage";
+import { PlatformCenterPage } from "./pages/PlatformCenterPage";
+import { CodexAccountsPage } from "./pages/platformAccounts/CodexAccountsPage";
+import { GeminiAccountsPage } from "./pages/platformAccounts/GeminiAccountsPage";
+import { KiroAccountsPage } from "./pages/platformAccounts/KiroAccountsPage";
+import { DesktopAgentsPage } from "./pages/DesktopAgentsPage";
 import { useStore } from "./lib/store";
 import { bridge } from "./lib/bridge";
+import {
+  buildApiProviderEditorPath,
+  PLATFORM_CENTER_API_PATH,
+  PLATFORM_CENTER_BASE_PATH,
+} from "./lib/platformCenterRoutes";
 
 function ModelProvidersRedirect() {
   const location = useLocation();
   return (
     <Navigate
       to={{
-        pathname: "/settings/model-providers",
+        pathname: PLATFORM_CENTER_API_PATH,
         search: location.search,
       }}
       replace
@@ -33,8 +42,8 @@ function ModelProviderEditorRedirect() {
   const { serviceType, providerId } = useParams();
   const pathname =
     serviceType && providerId
-      ? `/settings/model-providers/${serviceType}/${providerId}`
-      : "/settings/model-providers";
+      ? buildApiProviderEditorPath(serviceType as "openaiCompatible" | "claude" | "gemini", providerId)
+      : PLATFORM_CENTER_API_PATH;
 
   return (
     <Navigate
@@ -157,11 +166,24 @@ function App() {
           path="general"
           element={<SettingsPage embedded forcedSection="settings" hideSectionTabs />}
         />
-        <Route path="model-providers" element={<ModelProvidersPage embedded />} />
-        <Route path="model-providers/new" element={<ModelProviderEditorPage embedded />} />
+        <Route path="model-providers" element={<PlatformCenterPage />}>
+          <Route path="api" element={<ModelProvidersPage embedded />} />
+          <Route path="api/new" element={<ModelProviderEditorPage embedded />} />
+          <Route
+            path="api/:serviceType/:providerId"
+            element={<ModelProviderEditorPage embedded />}
+          />
+          <Route path="accounts/codex" element={<CodexAccountsPage />} />
+          <Route path="accounts/gemini" element={<GeminiAccountsPage />} />
+          <Route path="accounts/kiro" element={<KiroAccountsPage />} />
+        </Route>
+        <Route
+          path="model-providers/new"
+          element={<Navigate to={`${PLATFORM_CENTER_BASE_PATH}/api/new`} replace />}
+        />
         <Route
           path="model-providers/:serviceType/:providerId"
-          element={<ModelProviderEditorPage embedded />}
+          element={<ModelProviderEditorRedirect />}
         />
         <Route path="agents" element={<DesktopAgentsPage />} />
       </Route>

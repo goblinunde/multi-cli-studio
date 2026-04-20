@@ -141,6 +141,8 @@ function defaultTransportKind(cliId: AgentId): AgentTransportKind {
       return "codex-app-server";
     case "claude":
       return "claude-cli";
+    case "kiro":
+      return "kiro-cli";
     case "gemini":
       return "gemini-acp";
     default:
@@ -187,7 +189,7 @@ function invalidateTransportSession(
 }
 
 function normalizeAutoRouteTarget(value: string): AgentId {
-  if (value === "claude" || value === "gemini") return value;
+  if (value === "claude" || value === "gemini" || value === "kiro") return value;
   return "codex";
 }
 
@@ -700,7 +702,7 @@ function normalizeTransportSessions(
   tab: Pick<TerminalTab, "selectedCli" | "transportSessions"> | Partial<TerminalTab>
 ) {
   const next = { ...(tab.transportSessions ?? {}) } as Partial<Record<AgentId, AgentTransportSession>>;
-  const cliIds: AgentId[] = ["codex", "claude", "gemini"];
+  const cliIds: AgentId[] = ["codex", "claude", "gemini", "kiro"];
   cliIds.forEach((cliId) => {
     if (next[cliId]) {
       next[cliId] = createTransportSession(cliId, next[cliId] ?? undefined);
@@ -715,7 +717,7 @@ function normalizeContextBoundariesByCli(
   const next = {
     ...(tab.contextBoundariesByCli ?? {}),
   } as Partial<Record<AgentId, TerminalCliContextBoundary>>;
-  const cliIds: AgentId[] = ["codex", "claude", "gemini"];
+  const cliIds: AgentId[] = ["codex", "claude", "gemini", "kiro"];
   cliIds.forEach((cliId) => {
     if (next[cliId]) {
       next[cliId] = createCliContextBoundary(next[cliId] ?? undefined);

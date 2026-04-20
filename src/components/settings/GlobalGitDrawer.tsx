@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useStore } from "../../lib/store";
 import { DesktopGitSection } from "./DesktopGitSection";
+import { useStore } from "../../lib/store";
 
 export function GlobalGitDrawer() {
   const gitWorkbenchOpen = useStore((state) => state.gitWorkbenchOpen);

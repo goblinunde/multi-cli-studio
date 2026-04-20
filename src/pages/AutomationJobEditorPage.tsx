@@ -16,6 +16,7 @@ const EXECUTION_OPTIONS: Array<{ value: AutomationExecutionMode; label: string; 
   { value: "codex", label: "Codex", detail: "默认由 Codex 直接执行，适合代码实现与修改。" },
   { value: "claude", label: "Claude", detail: "默认由 Claude 执行，适合分析、审阅与推理。" },
   { value: "gemini", label: "Gemini", detail: "默认由 Gemini 执行，适合 UI 和视觉工作。" },
+  { value: "kiro", label: "Kiro", detail: "默认由 Kiro 执行，适合 Kiro CLI 的 headless 自动化执行。" },
 ];
 
 const PERMISSION_OPTIONS: Array<{ value: AutomationPermissionProfile; label: string; detail: string }> = [

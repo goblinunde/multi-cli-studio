@@ -100,8 +100,15 @@ function detectGitHubRepository() {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
-    const match = remoteUrl.match(/github\.com[:/]([^/]+\/[^/.]+?)(?:\.git)?$/);
-    return match?.[1] ?? null;
+    const httpsMatch = remoteUrl.match(/github\.com[:/]([^/]+\/[^/.]+?)(?:\.git)?$/i);
+    if (httpsMatch) {
+      return httpsMatch[1];
+    }
+    const sshAliasMatch = remoteUrl.match(/^(?:ssh:\/\/)?git@([^/:]+)[:/]([^/]+\/[^/.]+?)(?:\.git)?$/i);
+    if (sshAliasMatch && sshAliasMatch[1].toLowerCase().includes("github")) {
+      return sshAliasMatch[2];
+    }
+    return null;
   } catch {
     return null;
   }

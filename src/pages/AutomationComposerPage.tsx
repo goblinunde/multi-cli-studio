@@ -92,6 +92,7 @@ const EXECUTION_OPTIONS = [
   { value: "codex", label: "Codex" },
   { value: "claude", label: "Claude" },
   { value: "gemini", label: "Gemini" },
+  { value: "kiro", label: "Kiro" },
 ] as const;
 
 function executionModeLabel(value?: string | null) {

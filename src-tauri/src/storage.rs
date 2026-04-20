@@ -1940,12 +1940,7 @@ impl TerminalStorage {
         ensure_column_exists(conn, "workspaces", "connection_id", "TEXT")?;
         ensure_column_exists(conn, "workspaces", "remote_path", "TEXT")?;
         ensure_column_exists(conn, "workspaces", "location_label", "TEXT")?;
-        ensure_column_exists(
-            conn,
-            "chat_messages",
-            "selected_agent_json",
-            "TEXT",
-        )?;
+        ensure_column_exists(conn, "chat_messages", "selected_agent_json", "TEXT")?;
         ensure_column_exists(
             conn,
             "chat_messages",
