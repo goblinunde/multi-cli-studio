@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Multi CLI Studio
+Comment=Desktop orchestration shell for Codex, Claude, and Gemini CLIs
+Exec=multi-cli-studio
+Icon=multi-cli-studio
+Terminal=false
+Categories=Development;IDE;
+Keywords=AI;CLI;Coding;Developer;Tauri;
+StartupNotify=true

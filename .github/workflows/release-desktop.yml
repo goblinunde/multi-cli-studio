@@ -1,0 +1,324 @@
+name: Release Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the v prefix, for example 0.1.1"
+        required: true
+        type: string
+      release_name:
+        description: "Optional GitHub Release title"
+        required: false
+        default: ""
+        type: string
+      release_notes:
+        description: "Optional release notes markdown"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  validate_release:
+    name: Validate Release Config
+    runs-on: ubuntu-latest
+    env:
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Align updater feed with repository
+        run: node ./scripts/configure-release-feed.mjs ${{ github.repository }}
+
+      - name: Validate release prerequisites
+        run: node ./scripts/release-preflight.mjs --github-repo ${{ github.repository }} --require-secrets
+
+      - name: Validate Tauri signing secret format
+        run: node ./scripts/materialize-tauri-signing-key.mjs "$RUNNER_TEMP/multi-cli-studio.key"
+
+  build_macos:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.platform }}
+    needs: validate_release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            arch: aarch64
+          - platform: macos-15-intel
+            arch: x86_64
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Synchronize version metadata
+        run: node ./scripts/sync-version.mjs ${{ inputs.version }}
+
+      - name: Align updater feed with repository
+        run: node ./scripts/configure-release-feed.mjs ${{ github.repository }}
+
+      - name: Validate version metadata
+        run: node ./scripts/sync-version.mjs --check ${{ inputs.version }}
+
+      - name: Materialize Tauri signing key
+        run: |
+          set -euo pipefail
+          node ./scripts/materialize-tauri-signing-key.mjs "$HOME/.tauri/multi-cli-studio.key"
+
+      - name: Build ad-hoc signed app bundle
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: |
+          set -euo pipefail
+          export TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/multi-cli-studio.key")"
+          npm run tauri:build -- --bundles app
+
+      - name: Package macOS artifacts
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          ARCH="${{ matrix.arch }}"
+          APP_BUNDLE="src-tauri/target/release/bundle/macos/Multi CLI Studio.app"
+          APP_TARBALL="src-tauri/target/release/bundle/macos/Multi CLI Studio.app.tar.gz"
+
+          mkdir -p release-artifacts
+          bash scripts/create-dmg.sh "$APP_BUNDLE" "release-artifacts/multi-cli-studio_${VERSION}_${ARCH}.dmg"
+
+          COPYFILE_DISABLE=1 tar -czf "$APP_TARBALL" \
+            -C "src-tauri/target/release/bundle/macos" "Multi CLI Studio.app"
+
+          node ./scripts/run-tauri.mjs signer sign \
+            -f "$HOME/.tauri/multi-cli-studio.key" \
+            -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+            "$APP_TARBALL"
+
+          cp "$APP_TARBALL" "release-artifacts/multi-cli-studio_${ARCH}.app.tar.gz"
+          cp "${APP_TARBALL}.sig" "release-artifacts/multi-cli-studio_${ARCH}.app.tar.gz.sig"
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            release-artifacts/multi-cli-studio_*_${{ matrix.arch }}.dmg
+            release-artifacts/multi-cli-studio_${{ matrix.arch }}.app.tar.gz
+            release-artifacts/multi-cli-studio_${{ matrix.arch }}.app.tar.gz.sig
+
+  build_windows:
+    name: Windows (x86_64)
+    runs-on: windows-latest
+    needs: validate_release
+    env:
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Synchronize version metadata
+        run: node ./scripts/sync-version.mjs ${{ inputs.version }}
+
+      - name: Align updater feed with repository
+        run: node ./scripts/configure-release-feed.mjs ${{ github.repository }}
+
+      - name: Validate version metadata
+        run: node ./scripts/sync-version.mjs --check ${{ inputs.version }}
+
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: |
+          node .\scripts\materialize-tauri-signing-key.mjs "$env:USERPROFILE\.tauri\multi-cli-studio.key"
+          $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw "$env:USERPROFILE\.tauri\multi-cli-studio.key"
+          npm run tauri:build -- --bundles nsis
+
+      - name: Package Windows artifacts
+        id: windows_artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-artifacts | Out-Null
+          $installer = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis" -Filter "*-setup.exe" -File |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw "Windows NSIS installer not found."
+          }
+          $signature = Get-Item "$($installer.FullName).sig"
+          if (-not $signature.Exists) {
+            throw "Windows updater signature not found."
+          }
+
+          $targetName = "multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe"
+          Copy-Item $installer.FullName "release-artifacts\$targetName" -Force
+          Copy-Item $signature.FullName "release-artifacts\$targetName.sig" -Force
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: |
+            release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe
+            release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe.sig
+
+  release:
+    name: Publish Release Feed
+    runs-on: ubuntu-latest
+    needs:
+      - build_macos
+      - build_windows
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: macos-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-x86_64
+          path: release-artifacts
+
+      - name: Build release notes
+        run: |
+          set -euo pipefail
+          NOTES_FILE="release-artifacts/release-notes.md"
+          if [ -n "${{ inputs.release_notes }}" ]; then
+            printf '%s\n' "${{ inputs.release_notes }}" > "$NOTES_FILE"
+          else
+            printf '%s\n' \
+              "- Release v${{ inputs.version }}." \
+              "- macOS builds are distributed through GitHub Releases with ad-hoc signing, so first launch may require allowing the app in Privacy & Security." \
+              > "$NOTES_FILE"
+          fi
+
+      - name: Build latest.json
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          WINDOWS_ASSET="multi-cli-studio_${VERSION}_x86_64-setup.exe"
+          WINDOWS_SIG="$(cat "release-artifacts/${WINDOWS_ASSET}.sig")"
+          DARWIN_AARCH64_SIG="$(cat release-artifacts/multi-cli-studio_aarch64.app.tar.gz.sig)"
+          DARWIN_X86_64_SIG="$(cat release-artifacts/multi-cli-studio_x86_64.app.tar.gz.sig)"
+
+          python3 - <<PY
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          version = "${VERSION}"
+          notes = Path("release-artifacts/release-notes.md").read_text().strip()
+          windows_asset = "${WINDOWS_ASSET}"
+          repository = os.environ["RELEASE_REPOSITORY"]
+
+          payload = {
+            "version": version,
+            "notes": notes,
+            "pub_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "platforms": {
+              "darwin-aarch64": {
+                "url": f"https://github.com/{repository}/releases/download/v{version}/multi-cli-studio_aarch64.app.tar.gz",
+                "signature": """${DARWIN_AARCH64_SIG}""".strip(),
+              },
+              "darwin-x86_64": {
+                "url": f"https://github.com/{repository}/releases/download/v{version}/multi-cli-studio_x86_64.app.tar.gz",
+                "signature": """${DARWIN_X86_64_SIG}""".strip(),
+              },
+              "windows-x86_64": {
+                "url": f"https://github.com/{repository}/releases/download/v{version}/{windows_asset}",
+                "signature": """${WINDOWS_SIG}""".strip(),
+              },
+            },
+          }
+
+          Path("release-artifacts/latest.json").write_text(json.dumps(payload, indent=2) + "\n")
+          PY
+
+      - name: Create or update GitHub Release
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="v${{ inputs.version }}"
+          RELEASE_NAME="${{ inputs.release_name != '' && inputs.release_name || format('v{0}', inputs.version) }}"
+          NOTES_FILE="release-artifacts/release-notes.md"
+
+          if gh release view "$RELEASE_TAG" -R "$RELEASE_REPOSITORY" > /dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" -R "$RELEASE_REPOSITORY" --title "$RELEASE_NAME" --notes-file "$NOTES_FILE"
+          else
+            gh release create "$RELEASE_TAG" -R "$RELEASE_REPOSITORY" --title "$RELEASE_NAME" --target "$GITHUB_SHA" --notes-file "$NOTES_FILE"
+          fi
+
+      - name: Upload release assets
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="v${{ inputs.version }}"
+          gh release upload "$RELEASE_TAG" -R "$RELEASE_REPOSITORY" \
+            release-artifacts/multi-cli-studio_*_aarch64.dmg \
+            release-artifacts/multi-cli-studio_*_x86_64.dmg \
+            release-artifacts/multi-cli-studio_aarch64.app.tar.gz \
+            release-artifacts/multi-cli-studio_aarch64.app.tar.gz.sig \
+            release-artifacts/multi-cli-studio_x86_64.app.tar.gz \
+            release-artifacts/multi-cli-studio_x86_64.app.tar.gz.sig \
+            release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe \
+            release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe.sig \
+            release-artifacts/latest.json \
+            --clobber
