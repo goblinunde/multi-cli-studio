@@ -1,6 +1,6 @@
 [package]
 name = "multi-cli-studio"
-version = "0.1.1"
+version = "0.1.2"
 description = "Desktop orchestration shell for Codex, Claude, and Gemini CLIs."
 authors = ["OpenAI Codex"]
 edition = "2021"

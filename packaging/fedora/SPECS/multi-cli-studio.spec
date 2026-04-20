@@ -1,5 +1,5 @@
 Name:           multi-cli-studio
-Version:        0.1.1
+Version:        0.1.2
 Release:        2%{?dist}
 Summary:        Desktop orchestration shell for multiple AI coding CLIs
 
