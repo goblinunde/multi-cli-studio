@@ -37,7 +37,7 @@ Multi CLI Studio 的核心假设不是“选一个最强工具”，而是：
 
 - Windows 桌面端：当前主要发布目标，已经带有安装包发布流程
 - macOS 桌面端：通过 Tauri 桌面栈支持本地开发与构建
-- Linux 桌面端：支持本地开发与本地构建，Fedora 可直接运行；暂未提供 Linux 安装包自动发布流程
+- Linux 桌面端：支持本地开发与本地构建，Fedora 可直接运行；GitHub Releases 现已同步发布 Fedora RPM 产物
 
 ## 界面预览
 
@@ -294,12 +294,13 @@ https://generativelanguage.googleapis.com/v1beta
 
 - `.github/workflows/release-desktop.yml`
 
-该流程会同步版本号、构建 Tauri 桌面安装包，并将 macOS DMG、Windows 安装包和 `latest.json` 更新源上传到 GitHub Releases。
+该流程会同步版本号、构建桌面发布产物，并将 macOS DMG、Windows 安装包、Fedora RPM 以及 `latest.json` 更新源上传到 GitHub Releases。
 
 当前采用低成本 GitHub 分发：
 
 - 不依赖 Apple Developer ID / notarization。
 - macOS 构建使用 ad-hoc signing，用户首次打开时可能需要在“系统设置 -> 隐私与安全性”里手动放行。
+- 应用内更新当前只覆盖 macOS 和 Windows 的发布产物；Fedora RPM 目前仍作为手动下载资产发布。
 - 应用内更新仍然依赖 Tauri updater 签名，需要在 `src-tauri/tauri.conf.json` 中写入真实公钥，并在 GitHub Actions 中配置 updater 私钥。
 
 首次配置和发版步骤见：

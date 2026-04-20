@@ -8,6 +8,7 @@ const repoRoot = path.resolve(scriptDir, "..");
 const packageJsonPath = path.join(repoRoot, "package.json");
 const cargoTomlPath = path.join(repoRoot, "src-tauri", "Cargo.toml");
 const tauriConfigPath = path.join(repoRoot, "src-tauri", "tauri.conf.json");
+const fedoraSpecPath = path.join(repoRoot, "packaging", "fedora", "SPECS", "multi-cli-studio.spec");
 
 const args = process.argv.slice(2);
 const checkOnly = args.includes("--check");
@@ -24,6 +25,7 @@ if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(targetVersion)) {
 
 const cargoTomlRaw = fs.readFileSync(cargoTomlPath, "utf8");
 const tauriConfig = JSON.parse(fs.readFileSync(tauriConfigPath, "utf8"));
+const fedoraSpecRaw = fs.readFileSync(fedoraSpecPath, "utf8");
 
 const cargoVersionMatch = cargoTomlRaw.match(/^version\s*=\s*"([^"]+)"/m);
 if (!cargoVersionMatch) {
@@ -31,10 +33,17 @@ if (!cargoVersionMatch) {
   process.exit(1);
 }
 
+const fedoraSpecVersionMatch = fedoraSpecRaw.match(/^Version:\s+(.+)$/m);
+if (!fedoraSpecVersionMatch) {
+  console.error("Could not find Version in packaging/fedora/SPECS/multi-cli-studio.spec");
+  process.exit(1);
+}
+
 const currentVersions = {
   package: packageVersion,
   cargo: cargoVersionMatch[1],
   tauri: String(tauriConfig.version ?? ""),
+  fedoraSpec: fedoraSpecVersionMatch[1].trim(),
 };
 
 if (checkOnly) {
@@ -55,10 +64,17 @@ const nextCargoToml = cargoTomlRaw.replace(
   /^version\s*=\s*"([^"]+)"/m,
   `version = "${targetVersion}"`
 );
+const nextFedoraSpec = fedoraSpecRaw.replace(
+  /^Version:\s+(.+)$/m,
+  `Version:        ${targetVersion}`
+);
 tauriConfig.version = targetVersion;
 
 fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 fs.writeFileSync(cargoTomlPath, nextCargoToml, "utf8");
 fs.writeFileSync(tauriConfigPath, `${JSON.stringify(tauriConfig, null, 2)}\n`, "utf8");
+fs.writeFileSync(fedoraSpecPath, nextFedoraSpec, "utf8");
 
-console.log(`Synchronized package.json, src-tauri/Cargo.toml, and src-tauri/tauri.conf.json to ${targetVersion}.`);
+console.log(
+  `Synchronized package.json, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, and packaging/fedora/SPECS/multi-cli-studio.spec to ${targetVersion}.`
+);

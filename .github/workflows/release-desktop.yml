@@ -215,12 +215,80 @@ jobs:
             release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe
             release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe.sig
 
+  build_fedora_rpm:
+    name: Fedora RPM (x86_64)
+    runs-on: ubuntu-latest
+    needs: validate_release
+    container:
+      image: fedora:43
+    steps:
+      - name: Install Fedora build dependencies
+        run: |
+          set -euo pipefail
+          dnf install -y \
+            cargo \
+            rust \
+            gcc-c++ \
+            make \
+            nodejs \
+            webkit2gtk4.1-devel \
+            openssl-devel \
+            libappindicator-gtk3-devel \
+            librsvg2-devel \
+            libxdo-devel \
+            desktop-file-utils \
+            curl \
+            wget \
+            file \
+            tar \
+            gzip \
+            findutils \
+            which
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Synchronize version metadata
+        run: node ./scripts/sync-version.mjs ${{ inputs.version }}
+
+      - name: Validate version metadata
+        run: node ./scripts/sync-version.mjs --check ${{ inputs.version }}
+
+      - name: Build Fedora RPM artifacts
+        env:
+          RPM_TOPDIR: ${{ runner.temp }}/multi-cli-studio-rpmbuild
+          RPM_TMPPATH: ${{ runner.temp }}
+          CARGO_BUILD_JOBS: "1"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+          CARGO_PROFILE_RELEASE_DEBUG: "0"
+        run: |
+          set -euo pipefail
+          sh packaging/fedora/build-rpm.sh
+
+      - name: Collect Fedora RPM artifacts
+        env:
+          RPM_TOPDIR: ${{ runner.temp }}/multi-cli-studio-rpmbuild
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts
+          find "$RPM_TOPDIR/RPMS" -type f -name '*.rpm' -exec cp {} release-artifacts/ \;
+          find "$RPM_TOPDIR/SRPMS" -type f -name '*.src.rpm' -exec cp {} release-artifacts/ \;
+          ls -lah release-artifacts
+
+      - name: Upload Fedora RPM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fedora-rpm-x86_64
+          path: |
+            release-artifacts/*.rpm
+
   release:
     name: Publish Release Feed
     runs-on: ubuntu-latest
     needs:
       - build_macos
       - build_windows
+      - build_fedora_rpm
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RELEASE_REPOSITORY: ${{ github.repository }}
@@ -237,6 +305,12 @@ jobs:
         with:
           name: windows-x86_64
           path: release-artifacts
+
+      - name: Download Fedora RPM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: fedora-rpm-x86_64
+          path: release-artifacts/fedora
 
       - name: Build release notes
         run: |
@@ -321,4 +395,18 @@ jobs:
             release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe \
             release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe.sig \
             release-artifacts/latest.json \
+            --clobber
+
+      - name: Upload Fedora RPM release assets
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="v${{ inputs.version }}"
+          mapfile -d '' fedora_assets < <(find release-artifacts/fedora -type f \( -name '*.rpm' -o -name '*.src.rpm' \) -print0)
+          if [ "${#fedora_assets[@]}" -eq 0 ]; then
+            echo "No Fedora RPM artifacts were downloaded."
+            exit 1
+          fi
+
+          gh release upload "$RELEASE_TAG" -R "$RELEASE_REPOSITORY" \
+            "${fedora_assets[@]}" \
             --clobber

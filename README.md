@@ -37,7 +37,7 @@ Multi CLI Studio is built around a different assumption:
 
 - Windows desktop: primary packaged target with release workflow for installer output
 - macOS desktop: supported through the Tauri desktop stack and local build flow
-- Linux desktop: supported for local development and local builds, including Fedora; packaged release automation is not published yet
+- Linux desktop: supported for local development and local builds, including Fedora; GitHub Releases now also publish a Fedora RPM artifact
 
 ## Screenshots
 
@@ -299,12 +299,13 @@ The repo already includes a desktop release workflow:
 
 - `.github/workflows/release-desktop.yml`
 
-It synchronizes version metadata, builds the Tauri desktop bundle, and uploads the macOS DMGs, Windows installer, and `latest.json` update feed to GitHub Releases.
+It synchronizes version metadata, builds the desktop release artifacts, and uploads the macOS DMGs, Windows installer, Fedora RPMs, and `latest.json` update feed to GitHub Releases.
 
 The current distribution flow is intentionally low-cost:
 
 - It does not rely on Apple Developer ID or notarization.
 - macOS builds use ad-hoc signing, so first launch may require manually allowing the app in `Privacy & Security`.
+- In-app updates currently target the macOS and Windows release artifacts; Fedora RPMs are published as manual download assets.
 - In-app updates still require a real Tauri updater keypair: put the public key in `src-tauri/tauri.conf.json` and configure the private key in GitHub Actions secrets.
 
 Full setup and release steps:
