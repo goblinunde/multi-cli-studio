@@ -1,6 +1,9 @@
 name: Release Desktop
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -22,9 +25,50 @@ permissions:
   contents: write
 
 jobs:
+  release_context:
+    name: Resolve Release Context
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      release_name: ${{ steps.resolve.outputs.release_name }}
+      release_notes: ${{ steps.resolve.outputs.release_notes }}
+    steps:
+      - name: Resolve version and release metadata
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            RELEASE_TAG="v${VERSION}"
+            RELEASE_NAME="${{ inputs.release_name }}"
+            RELEASE_NOTES="${{ inputs.release_notes }}"
+          else
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+            VERSION="${RELEASE_TAG#v}"
+            RELEASE_NAME=""
+            RELEASE_NOTES=""
+          fi
+
+          if [ -z "${RELEASE_NAME}" ]; then
+            RELEASE_NAME="${RELEASE_TAG}"
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "release_tag=${RELEASE_TAG}"
+            echo "release_name=${RELEASE_NAME}"
+            echo "release_notes<<EOF"
+            printf '%s\n' "${RELEASE_NOTES}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
   validate_release:
     name: Validate Release Config
     runs-on: ubuntu-latest
+    needs: release_context
     env:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
@@ -49,7 +93,9 @@ jobs:
   build_macos:
     name: macOS (${{ matrix.arch }})
     runs-on: ${{ matrix.platform }}
-    needs: validate_release
+    needs:
+      - release_context
+      - validate_release
     strategy:
       fail-fast: false
       matrix:
@@ -86,13 +132,13 @@ jobs:
         run: npm ci
 
       - name: Synchronize version metadata
-        run: node ./scripts/sync-version.mjs ${{ inputs.version }}
+        run: node ./scripts/sync-version.mjs ${{ needs.release_context.outputs.version }}
 
       - name: Align updater feed with repository
         run: node ./scripts/configure-release-feed.mjs ${{ github.repository }}
 
       - name: Validate version metadata
-        run: node ./scripts/sync-version.mjs --check ${{ inputs.version }}
+        run: node ./scripts/sync-version.mjs --check ${{ needs.release_context.outputs.version }}
 
       - name: Materialize Tauri signing key
         run: |
@@ -111,7 +157,7 @@ jobs:
       - name: Package macOS artifacts
         run: |
           set -euo pipefail
-          VERSION="${{ inputs.version }}"
+          VERSION="${{ needs.release_context.outputs.version }}"
           ARCH="${{ matrix.arch }}"
           APP_BUNDLE="src-tauri/target/release/bundle/macos/Multi CLI Studio.app"
           APP_TARBALL="src-tauri/target/release/bundle/macos/Multi CLI Studio.app.tar.gz"
@@ -142,7 +188,9 @@ jobs:
   build_windows:
     name: Windows (x86_64)
     runs-on: windows-latest
-    needs: validate_release
+    needs:
+      - release_context
+      - validate_release
     env:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
@@ -170,13 +218,13 @@ jobs:
         run: npm ci
 
       - name: Synchronize version metadata
-        run: node ./scripts/sync-version.mjs ${{ inputs.version }}
+        run: node ./scripts/sync-version.mjs ${{ needs.release_context.outputs.version }}
 
       - name: Align updater feed with repository
         run: node ./scripts/configure-release-feed.mjs ${{ github.repository }}
 
       - name: Validate version metadata
-        run: node ./scripts/sync-version.mjs --check ${{ inputs.version }}
+        run: node ./scripts/sync-version.mjs --check ${{ needs.release_context.outputs.version }}
 
       - name: Build Windows installer
         shell: pwsh
@@ -203,7 +251,7 @@ jobs:
             throw "Windows updater signature not found."
           }
 
-          $targetName = "multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe"
+          $targetName = "multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe"
           Copy-Item $installer.FullName "release-artifacts\$targetName" -Force
           Copy-Item $signature.FullName "release-artifacts\$targetName.sig" -Force
 
@@ -212,13 +260,15 @@ jobs:
         with:
           name: windows-x86_64
           path: |
-            release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe
-            release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe.sig
+            release-artifacts/multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe
+            release-artifacts/multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe.sig
 
   build_fedora_rpm:
     name: Fedora RPM (x86_64)
     runs-on: ubuntu-latest
-    needs: validate_release
+    needs:
+      - release_context
+      - validate_release
     container:
       image: fedora:43
     steps:
@@ -249,10 +299,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Synchronize version metadata
-        run: node ./scripts/sync-version.mjs ${{ inputs.version }}
+        run: node ./scripts/sync-version.mjs ${{ needs.release_context.outputs.version }}
 
       - name: Validate version metadata
-        run: node ./scripts/sync-version.mjs --check ${{ inputs.version }}
+        run: node ./scripts/sync-version.mjs --check ${{ needs.release_context.outputs.version }}
 
       - name: Build Fedora RPM artifacts
         env:
@@ -286,6 +336,7 @@ jobs:
     name: Publish Release Feed
     runs-on: ubuntu-latest
     needs:
+      - release_context
       - build_macos
       - build_windows
       - build_fedora_rpm
@@ -316,11 +367,11 @@ jobs:
         run: |
           set -euo pipefail
           NOTES_FILE="release-artifacts/release-notes.md"
-          if [ -n "${{ inputs.release_notes }}" ]; then
-            printf '%s\n' "${{ inputs.release_notes }}" > "$NOTES_FILE"
+          if [ -n "${{ needs.release_context.outputs.release_notes }}" ]; then
+            printf '%s\n' "${{ needs.release_context.outputs.release_notes }}" > "$NOTES_FILE"
           else
             printf '%s\n' \
-              "- Release v${{ inputs.version }}." \
+              "- Release ${{ needs.release_context.outputs.release_tag }}." \
               "- macOS builds are distributed through GitHub Releases with ad-hoc signing, so first launch may require allowing the app in Privacy & Security." \
               > "$NOTES_FILE"
           fi
@@ -328,7 +379,7 @@ jobs:
       - name: Build latest.json
         run: |
           set -euo pipefail
-          VERSION="${{ inputs.version }}"
+          VERSION="${{ needs.release_context.outputs.version }}"
           WINDOWS_ASSET="multi-cli-studio_${VERSION}_x86_64-setup.exe"
           WINDOWS_SIG="$(cat "release-artifacts/${WINDOWS_ASSET}.sig")"
           DARWIN_AARCH64_SIG="$(cat release-artifacts/multi-cli-studio_aarch64.app.tar.gz.sig)"
@@ -371,8 +422,8 @@ jobs:
       - name: Create or update GitHub Release
         run: |
           set -euo pipefail
-          RELEASE_TAG="v${{ inputs.version }}"
-          RELEASE_NAME="${{ inputs.release_name != '' && inputs.release_name || format('v{0}', inputs.version) }}"
+          RELEASE_TAG="${{ needs.release_context.outputs.release_tag }}"
+          RELEASE_NAME="${{ needs.release_context.outputs.release_name }}"
           NOTES_FILE="release-artifacts/release-notes.md"
 
           if gh release view "$RELEASE_TAG" -R "$RELEASE_REPOSITORY" > /dev/null 2>&1; then
@@ -384,7 +435,7 @@ jobs:
       - name: Upload release assets
         run: |
           set -euo pipefail
-          RELEASE_TAG="v${{ inputs.version }}"
+          RELEASE_TAG="${{ needs.release_context.outputs.release_tag }}"
           gh release upload "$RELEASE_TAG" -R "$RELEASE_REPOSITORY" \
             release-artifacts/multi-cli-studio_*_aarch64.dmg \
             release-artifacts/multi-cli-studio_*_x86_64.dmg \
@@ -392,15 +443,15 @@ jobs:
             release-artifacts/multi-cli-studio_aarch64.app.tar.gz.sig \
             release-artifacts/multi-cli-studio_x86_64.app.tar.gz \
             release-artifacts/multi-cli-studio_x86_64.app.tar.gz.sig \
-            release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe \
-            release-artifacts/multi-cli-studio_${{ inputs.version }}_x86_64-setup.exe.sig \
+            release-artifacts/multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe \
+            release-artifacts/multi-cli-studio_${{ needs.release_context.outputs.version }}_x86_64-setup.exe.sig \
             release-artifacts/latest.json \
             --clobber
 
       - name: Upload Fedora RPM release assets
         run: |
           set -euo pipefail
-          RELEASE_TAG="v${{ inputs.version }}"
+          RELEASE_TAG="${{ needs.release_context.outputs.release_tag }}"
           mapfile -d '' fedora_assets < <(find release-artifacts/fedora -type f \( -name '*.rpm' -o -name '*.src.rpm' \) -print0)
           if [ "${#fedora_assets[@]}" -eq 0 ]; then
             echo "No Fedora RPM artifacts were downloaded."
