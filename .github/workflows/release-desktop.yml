@@ -278,6 +278,7 @@ jobs:
           dnf install -y \
             cargo \
             rust \
+            rpm-build \
             gcc-c++ \
             make \
             nodejs \

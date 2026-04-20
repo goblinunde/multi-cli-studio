@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Multi CLI Studio",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "identifier": "com.local.multi-cli-studio",
   "build": {
     "beforeDevCommand": "npm run dev",
